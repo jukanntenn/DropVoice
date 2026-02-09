@@ -1,0 +1,89 @@
+@config "../tailwind.config.ts";
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant radix-checked (&:where([data-state="checked"]));
+@custom-variant radix-unchecked (&:where([data-state="unchecked"]));
+
+/* Design System: Liquid Glass Style
+ * Primary: Teal (#0D9488 / #14B8A6)
+ * CTA: Orange (#F97316)
+ * Style: Translucent, backdrop blur, flowing gradients
+ */
+
+:root {
+  --background: 170 40% 98%;
+  --foreground: 172 50% 15%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 172 50% 15%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 172 50% 15%;
+
+  --primary: 172 85% 35%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 168 30% 92%;
+  --secondary-foreground: 172 50% 20%;
+
+  --muted: 168 20% 95%;
+  --muted-foreground: 172 15% 45%;
+
+  --accent: 24 95% 53%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 168 20% 88%;
+  --input: 168 20% 88%;
+  --ring: 172 85% 35%;
+
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: 172 50% 6%;
+  --foreground: 0 0% 98%;
+
+  --card: 172 40% 10%;
+  --card-foreground: 0 0% 98%;
+
+  --popover: 172 40% 10%;
+  --popover-foreground: 0 0% 98%;
+
+  --primary: 168 85% 50%;
+  --primary-foreground: 172 50% 6%;
+
+  --secondary: 172 25% 16%;
+  --secondary-foreground: 0 0% 95%;
+
+  --muted: 172 20% 14%;
+  --muted-foreground: 0 0% 70%;
+
+  --accent: 24 90% 55%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 70% 55%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 172 20% 18%;
+  --input: 172 20% 18%;
+  --ring: 168 85% 50%;
+}
+
+body {
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.6;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}

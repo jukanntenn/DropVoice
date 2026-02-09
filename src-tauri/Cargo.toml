@@ -1,0 +1,38 @@
+[package]
+name = "dropvoice"
+version = "0.0.1"
+authors = ["DropVoice Team"]
+description = "DropVoice enables sending voice-to-text input from your mobile phone to a PC."
+license = "MIT"
+repository = "https://github.com/jukanntenn/DropVoice"
+keywords = ["tauri", "lan", "websocket", "text-input"]
+categories = ["gui", "network-programming"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+local-ip-address = "0.6"
+enigo = "0.6"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+hyper = { version = "1", features = ["full", "server"] }
+hyper-util = { version = "0.1", features = ["full", "server"] }
+http-body-util = "0.1"
+sha1 = "0.10"
+base64 = "0.22"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

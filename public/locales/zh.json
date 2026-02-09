@@ -1,0 +1,17 @@
+{
+  "status": {
+    "connected": "● 已连接",
+    "disconnected": "○ 未连接",
+    "connecting": "连接中..."
+  },
+  "input": {
+    "placeholder": "输入要发送到电脑的文字...",
+    "restore": "🔄 恢复上一条消息",
+    "clear": "✕ 清除",
+    "charCount": "{{count}} / 10000"
+  },
+  "actions": {
+    "send": "发送到电脑",
+    "hint": "按 Enter 发送 (Ctrl+Enter 换行)"
+  }
+}

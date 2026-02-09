@@ -1,0 +1,17 @@
+{
+  "status": {
+    "connected": "● Connected",
+    "disconnected": "○ Disconnected",
+    "connecting": "Connecting..."
+  },
+  "input": {
+    "placeholder": "Type text to send to your PC...",
+    "restore": "🔄 Restore Last Message",
+    "clear": "✕ Clear",
+    "charCount": "{{count}} / 10000"
+  },
+  "actions": {
+    "send": "Send to PC",
+    "hint": "Press Enter to send (Ctrl+Enter for new line)"
+  }
+}

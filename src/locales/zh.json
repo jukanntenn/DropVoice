@@ -1,0 +1,43 @@
+{
+  "app": {
+    "title": "DropVoice",
+    "loading": "正在启动服务器..."
+  },
+  "connection": {
+    "scanQR": "使用手机扫描二维码连接",
+    "enterUrl": "或在浏览器手动输入链接访问",
+    "warning": "仅在可信局域网中使用"
+  },
+  "controls": {
+    "start": "启动服务器",
+    "stop": "停止服务器"
+  },
+  "language": {
+    "switch": "Language / 语言",
+    "en": "English",
+    "zh": "简体中文"
+  },
+  "copy": {
+    "button": "复制链接",
+    "copied": "已复制!"
+  },
+  "theme": {
+    "light": "浅色模式",
+    "dark": "深色模式",
+    "system": "跟随系统"
+  },
+  "common": {
+    "dismiss": "关闭"
+  },
+  "settings": {
+    "title": "设置",
+    "autoStart": {
+      "label": "开机自启动",
+      "description": "随系统启动自动运行 DropVoice"
+    },
+    "minimizeToTray": {
+      "label": "关闭时最小化到托盘",
+      "description": "点击关闭按钮时隐藏到系统托盘，而非退出应用"
+    }
+  }
+}

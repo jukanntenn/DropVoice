@@ -1,0 +1,43 @@
+{
+  "app": {
+    "title": "DropVoice",
+    "loading": "Starting server..."
+  },
+  "connection": {
+    "scanQR": "Scan QR code with phone",
+    "enterUrl": "Or enter URL in browser",
+    "warning": "Use only on trusted LAN networks"
+  },
+  "controls": {
+    "start": "Start Server",
+    "stop": "Stop Server"
+  },
+  "language": {
+    "switch": "Language / 语言",
+    "en": "English",
+    "zh": "简体中文"
+  },
+  "copy": {
+    "button": "Copy URL",
+    "copied": "Copied!"
+  },
+  "theme": {
+    "light": "Light mode",
+    "dark": "Dark mode",
+    "system": "Follow system"
+  },
+  "common": {
+    "dismiss": "Dismiss"
+  },
+  "settings": {
+    "title": "Settings",
+    "autoStart": {
+      "label": "Launch at Login",
+      "description": "Automatically start DropVoice on system startup"
+    },
+    "minimizeToTray": {
+      "label": "Minimize to Tray",
+      "description": "When closed, hide to system tray instead of exiting the app"
+    }
+  }
+}
