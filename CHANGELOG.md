@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.2] - 2026-02-25
+
+### Added
+
+- **Configurable input delay**: Character-by-character text injection with user-adjustable delay (1-100ms) to ensure complete text input on all platforms
+
+### Fixed
+
+- **Incomplete text input**: Fixed issue where text injection could be incomplete, now supports buffered input with configurable delay
+
 ## [0.0.1] - 2026-02-24
 
 ### Added

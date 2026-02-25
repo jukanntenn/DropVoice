@@ -1,6 +1,6 @@
 [package]
 name = "dropvoice"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["DropVoice Team"]
 description = "DropVoice enables sending voice-to-text input from your mobile phone to a PC."
 license = "MIT"

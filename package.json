@@ -1,6 +1,6 @@
 {
   "name": "dropvoice",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "DropVoice enables sending voice-to-text input from your mobile phone to a PC.",
   "keywords": [
     "tauri",
