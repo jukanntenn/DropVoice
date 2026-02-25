@@ -5,11 +5,14 @@ import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
+import { Slider } from "./ui/slider";
+import { Label } from "./ui/label";
 
 type SettingsState = {
   autoStartEnabled: boolean;
   minimizeToTrayEnabled: boolean;
   minimizeToTrayVisible: boolean;
+  inputDelay: number;
 };
 
 export default function SettingsModal({
@@ -24,8 +27,10 @@ export default function SettingsModal({
     autoStartEnabled: true,
     minimizeToTrayEnabled: true,
     minimizeToTrayVisible: false,
+    inputDelay: 10,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isSavingDelay, setIsSavingDelay] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -36,10 +41,11 @@ export default function SettingsModal({
       invoke<boolean>("get_minimize_to_tray"),
       invoke<boolean>("get_minimize_to_tray_visible"),
       isEnabled(),
+      invoke<number>("get_input_delay"),
     ])
-      .then(([minimizeToTrayEnabled, minimizeToTrayVisible, autoStartEnabled]) => {
+      .then(([minimizeToTrayEnabled, minimizeToTrayVisible, autoStartEnabled, inputDelay]) => {
         if (!isActive) return;
-        setSettings({ autoStartEnabled, minimizeToTrayEnabled, minimizeToTrayVisible });
+        setSettings({ autoStartEnabled, minimizeToTrayEnabled, minimizeToTrayVisible, inputDelay });
       })
       .catch((error) => {
         console.error("Failed to load settings:", error);
@@ -84,6 +90,25 @@ export default function SettingsModal({
     } catch (error) {
       console.error("Failed to set minimize to tray:", error);
       setSettings((prev) => ({ ...prev, minimizeToTrayEnabled: !nextEnabled }));
+    }
+  };
+
+  const handleInputDelayChange = (value: number[]) => {
+    const newDelay = value[0];
+    setSettings((prev) => ({ ...prev, inputDelay: newDelay }));
+  };
+
+  const handleInputDelayChangeCommit = async (value: number[]) => {
+    const newDelay = value[0];
+    setIsSavingDelay(true);
+    try {
+      await invoke("set_input_delay", { delayMs: newDelay });
+    } catch (error) {
+      console.error("Failed to set input delay:", error);
+      // Revert on error
+      setSettings((prev) => ({ ...prev, inputDelay: settings.inputDelay }));
+    } finally {
+      setIsSavingDelay(false);
     }
   };
 
@@ -150,6 +175,31 @@ export default function SettingsModal({
                 />
               </div>
             )}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="input-delay" className="text-sm font-medium text-foreground dark:text-white">
+                  {t("settings.inputDelay.label")}
+                </Label>
+                <span className="text-sm font-mono text-muted-foreground dark:text-slate-400">
+                  {settings.inputDelay}ms
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground/80 dark:text-slate-400">
+                {t("settings.inputDelay.description")}
+              </p>
+              <Slider
+                id="input-delay"
+                min={1}
+                max={100}
+                step={1}
+                value={[settings.inputDelay]}
+                onValueChange={handleInputDelayChange}
+                onValueCommit={handleInputDelayChangeCommit}
+                disabled={isSavingDelay}
+                className="cursor-pointer"
+              />
+            </div>
           </div>
         )}
       </div>

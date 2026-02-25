@@ -38,6 +38,10 @@
     "minimizeToTray": {
       "label": "关闭时最小化到托盘",
       "description": "点击关闭按钮时隐藏到系统托盘，而非退出应用"
+    },
+    "inputDelay": {
+      "label": "输入延迟",
+      "description": "字符之间的延迟（毫秒）。如果输入不完整请增加，想要更快输入请减少。"
     }
   }
 }

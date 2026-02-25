@@ -38,6 +38,10 @@
     "minimizeToTray": {
       "label": "Minimize to Tray",
       "description": "When closed, hide to system tray instead of exiting the app"
+    },
+    "inputDelay": {
+      "label": "Input Delay",
+      "description": "Delay between characters (milliseconds). Increase if text is incomplete, decrease for faster input."
     }
   }
 }

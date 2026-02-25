@@ -8,7 +8,7 @@ use tokio_tungstenite::WebSocketStream;
 use http_body_util::Full;
 use hyper::body::Bytes;
 use hyper_util::rt::TokioIo;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
 use std::sync::Arc;
 use sha1::Digest;
 use base64::engine::general_purpose::STANDARD;
@@ -16,16 +16,18 @@ use base64::Engine;
 use crate::text::injector;
 use tracing::{info, error, warn};
 
-/// Connection manager to track active connections
+/// Connection manager to track active connections and input delay
 #[derive(Clone)]
 pub struct ConnectionManager {
     connection_count: Arc<AtomicUsize>,
+    input_delay_ms: Arc<AtomicU64>,
 }
 
 impl ConnectionManager {
     pub fn new() -> Self {
         Self {
             connection_count: Arc::new(AtomicUsize::new(0)),
+            input_delay_ms: Arc::new(AtomicU64::new(10)),
         }
     }
 
@@ -39,6 +41,14 @@ impl ConnectionManager {
 
     pub fn get_count(&self) -> usize {
         self.connection_count.load(Ordering::SeqCst)
+    }
+
+    pub fn set_input_delay(&self, delay_ms: u64) {
+        self.input_delay_ms.store(delay_ms, Ordering::SeqCst);
+    }
+
+    pub fn get_input_delay(&self) -> u64 {
+        self.input_delay_ms.load(Ordering::SeqCst)
     }
 }
 
@@ -153,7 +163,8 @@ async fn handle_connection(
                                 }
 
                                 // Inject text
-                                match injector::inject_text(content) {
+                                let delay_ms = connection_manager.get_input_delay();
+                                match injector::inject_text(content, delay_ms) {
                                     Ok(_) => {
                                         info!("Text injected successfully");
                                         let _ = ws_sender

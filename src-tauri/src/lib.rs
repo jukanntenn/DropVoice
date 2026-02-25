@@ -8,7 +8,6 @@ mod i18n;
 use commands::ServerState;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
-use tauri_plugin_autostart::ManagerExt;
 
 pub(crate) fn build_tray_menu(app: &tauri::AppHandle) -> Result<tauri::menu::Menu<tauri::Wry>, String> {
     use tauri::menu::{Menu, MenuItem};
@@ -77,6 +76,8 @@ pub fn run() {
             app.state::<ServerState>()
                 .minimize_to_tray_enabled
                 .store(minimize_to_tray, std::sync::atomic::Ordering::SeqCst);
+            let initial_delay = crate::commands::load_input_delay_preference(&app_handle);
+            *app.state::<ServerState>().input_delay_ms.lock().unwrap() = initial_delay;
             let menu = build_tray_menu(&app_handle)?;
 
             let mut builder = TrayIconBuilder::with_id("main")
@@ -149,7 +150,9 @@ pub fn run() {
             commands::get_lan_warning_dismissed,
             commands::set_minimize_to_tray,
             commands::get_minimize_to_tray,
-            commands::get_minimize_to_tray_visible
+            commands::get_minimize_to_tray_visible,
+            commands::set_input_delay,
+            commands::get_input_delay
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

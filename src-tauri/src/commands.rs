@@ -19,6 +19,7 @@ pub struct ServerState {
     connection_manager: ConnectionManager,
     pub language: Arc<Mutex<String>>,
     pub minimize_to_tray_enabled: Arc<AtomicBool>,
+    pub input_delay_ms: Arc<Mutex<u64>>,
 }
 
 impl ServerState {
@@ -29,6 +30,7 @@ impl ServerState {
             connection_manager: ConnectionManager::new(),
             language: Arc::new(Mutex::new("en".to_string())),
             minimize_to_tray_enabled: Arc::new(AtomicBool::new(true)),
+            input_delay_ms: Arc::new(Mutex::new(10)),
         }
     }
 }
@@ -54,6 +56,10 @@ pub async fn start_server(
     }
 
     let connection_manager = state.connection_manager.clone();
+
+    // Initialize connection manager with current input delay
+    let initial_delay = *state.input_delay_ms.lock().unwrap();
+    connection_manager.set_input_delay(initial_delay);
     let is_running = state.is_running.clone();
     let port_state = state.port.clone();
 
@@ -210,6 +216,7 @@ const LANGUAGE_FILE: &str = "language-preference.txt";
 const THEME_FILE: &str = "theme-preference.txt";
 const LAN_WARNING_FILE: &str = "lan-warning-dismissed.txt";
 const MINIMIZE_TO_TRAY_FILE: &str = "minimize-to-tray-enabled.txt";
+const INPUT_DELAY_FILE: &str = "input-delay-ms.txt";
 
 fn get_language_path(app: &AppHandle) -> PathBuf {
     app.path().app_data_dir()
@@ -251,6 +258,12 @@ fn get_minimize_to_tray_path(app: &AppHandle) -> PathBuf {
     app.path().app_data_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join(MINIMIZE_TO_TRAY_FILE)
+}
+
+fn get_input_delay_path(app: &AppHandle) -> PathBuf {
+    app.path().app_data_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join(INPUT_DELAY_FILE)
 }
 
 pub(crate) fn load_minimize_to_tray_preference(app: &AppHandle) -> bool {
@@ -448,6 +461,58 @@ pub fn get_minimize_to_tray_visible() -> bool {
     {
         false
     }
+}
+
+// ============================================================================
+// Input Delay Commands
+// ============================================================================
+
+pub(crate) fn load_input_delay_preference(app: &AppHandle) -> u64 {
+    let path = get_input_delay_path(app);
+    match fs::read_to_string(&path) {
+        Ok(content) => {
+            match content.trim().parse::<u64>() {
+                Ok(delay) if delay >= 1 && delay <= 1000 => delay,
+                _ => {
+                    warn!("Invalid input delay in storage: {}, using default 10ms", content.trim());
+                    10
+                }
+            }
+        }
+        Err(_) => 10,
+    }
+}
+
+#[tauri::command]
+pub async fn set_input_delay(app: AppHandle, delay_ms: u64, state: State<'_, ServerState>) -> Result<(), String> {
+    if delay_ms < 1 || delay_ms > 1000 {
+        return Err("Input delay must be between 1 and 1000 milliseconds".to_string());
+    }
+
+    let path = get_input_delay_path(&app);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| {
+            let msg = format!("Failed to create settings directory: {}", e);
+            error!("{}", msg);
+            msg
+        })?;
+    }
+
+    fs::write(&path, delay_ms.to_string()).map_err(|e| {
+        let msg = format!("Failed to write input delay setting: {}", e);
+        error!("{}", msg);
+        msg
+    })?;
+
+    *state.input_delay_ms.lock().unwrap() = delay_ms;
+    state.connection_manager.set_input_delay(delay_ms);
+    info!("Input delay setting saved: {}ms", delay_ms);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_input_delay(state: State<'_, ServerState>) -> Result<u64, String> {
+    Ok(*state.input_delay_ms.lock().unwrap())
 }
 
 #[cfg(test)]
