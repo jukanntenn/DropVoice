@@ -57,6 +57,17 @@ These guides help you **ask the right questions before coding**.
 
 → Read [Cross-Platform Thinking Guide](./cross-platform-thinking-guide.md)
 
+### When to Think About Build Profiles
+
+- [ ] Adding `#[cfg(...)]` conditional compilation
+- [ ] Code that only runs in specific build modes (debug/release)
+- [ ] Platform-specific features or optimizations
+- [ ] Before releasing a new version
+
+→ **Key insight**: Conditional compilation can hide bugs! Always test both debug and release builds.
+
+**Example**: `#[cfg(not(debug_assertions))]` code is skipped in dev mode, so missing imports or errors won't be caught until release build.
+
 ---
 
 ## Pre-Modification Rule (CRITICAL)

@@ -100,6 +100,22 @@ info!("WebSocket connection established");
 error!("Failed to inject text: {}", e);
 ```
 
+### 5. Tauri Plugin Trait Imports
+
+When using Tauri plugin features, import the required traits:
+
+```rust
+// Plugin traits extend App/AppHandle with methods
+use tauri_plugin_autostart::ManagerExt;  // Provides autolaunch() method
+use tauri::Manager;  // Provides state(), get_webview_window(), etc.
+
+// Now you can call trait methods
+app.autolaunch().enable()?;
+app.state::<ServerState>();
+```
+
+**Why**: Rust requires traits to be in scope to call their methods, even if the type implements the trait. The compiler will suggest the import when missing.
+
 ---
 
 ## Testing Requirements
@@ -152,6 +168,11 @@ cargo clippy
 - [ ] `cargo clippy` has no warnings
 - [ ] Important events are logged
 - [ ] Errors are properly formatted
+
+### Before Release
+
+- [ ] `pnpm tauri build` succeeds (tests release mode)
+- [ ] All conditional compilation paths are verified
 
 ### Thread Safety
 
@@ -220,3 +241,36 @@ tokio::spawn(async move {
 ```
 
 **Reference**: `src-tauri/src/commands.rs:93-101`
+
+### 4. Conditional Compilation Hiding Bugs
+
+**Symptom**: Code works in dev mode but fails in release build.
+
+**Cause**: `#[cfg(...)]` conditional compilation excludes code from certain build profiles, so bugs in that code are not caught during development.
+
+**Example**:
+```rust
+// This code is ONLY compiled in release mode
+#[cfg(not(debug_assertions))]
+if let Ok(false) = app.autolaunch().is_enabled() {
+    if let Err(e) = app.autolaunch().enable() {
+        tracing::error!("Failed to enable auto-start: {}", e);
+    }
+}
+```
+
+If `autolaunch()` requires a trait import that's missing:
+- ✅ Dev mode (`pnpm tauri dev`): Code is skipped, no error
+- ❌ Release build (`pnpm tauri build`): Code is compiled, compilation fails
+
+**Fix**: Always test release builds before publishing:
+```bash
+pnpm tauri build  # Test release mode compilation
+```
+
+**Prevention**:
+1. Run `pnpm tauri build` before every release
+2. When adding `#[cfg(...)]` code, test both build profiles
+3. Use CI to test both debug and release builds
+
+**Reference**: Bug introduced in commit f856df3, fixed in commit 922a533
