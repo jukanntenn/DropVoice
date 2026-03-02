@@ -1,14 +1,17 @@
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { StatusIndicator } from "./components/StatusIndicator";
+import { AddDeviceModal } from "./components/AddDeviceModal";
+import { DeviceNameEditor } from "./components/DeviceNameEditor";
+import { DeviceTabs } from "./components/DeviceTabs";
 import { TextInput } from "./components/TextInput";
 import { SendButton } from "./components/SendButton";
 import { RestoreButton } from "./components/RestoreButton";
 import { ClearButton } from "./components/ClearButton";
 import { SettingsPage } from "./components/SettingsPage";
 import { Toast, useToast } from "./components/Toast";
-import { useWebSocket } from "./hooks/useWebSocket";
+import { useDeviceManager } from "./hooks/useDeviceManager";
+import { useMultiWebSocket } from "./hooks/useMultiWebSocket";
 import { useSettings } from "./hooks/useSettings";
 import {
   clearDraft,
@@ -30,10 +33,37 @@ export default function App() {
   const [text, setText] = useState("");
   const [showRestore, setShowRestore] = useState(false);
 
+  const [showAddDevice, setShowAddDevice] = useState(false);
+  const [renameDeviceId, setRenameDeviceId] = useState<string | null>(null);
+  const [showRename, setShowRename] = useState(false);
+
   const { t } = useTranslation();
   const { toasts, showToast, removeToast } = useToast();
-  const { status, isSending, lastError, send, reconnectAttempts } =
-    useWebSocket();
+  const {
+    isInitialized,
+    devices: managedDevices,
+    setDevices,
+    activeDeviceId: managedActiveDeviceId,
+    setActiveDeviceId,
+  } = useDeviceManager();
+
+  const {
+    devices,
+    activeDeviceId,
+    isSending,
+    lastError,
+    clearError,
+    addDevice,
+    removeDevice,
+    renameDevice,
+    setActiveDevice,
+    sendToActive,
+  } = useMultiWebSocket(
+    managedDevices,
+    setDevices,
+    managedActiveDeviceId,
+    setActiveDeviceId,
+  );
 
   useEffect(() => {
     initMobileI18n().then(() => setI18nReady(true));
@@ -54,17 +84,24 @@ export default function App() {
 
   useEffect(() => {
     if (!lastError) return;
-    showToast(lastError, "error");
-  }, [lastError, showToast]);
+    if (lastError.startsWith("devices.")) {
+      showToast(t(lastError), "error");
+    } else {
+      showToast(lastError, "error");
+    }
+    clearError();
+  }, [clearError, lastError, showToast, t]);
 
   const canSend = useMemo(() => {
+    const active = devices.find((d) => d.id === activeDeviceId);
     return (
-      status === "connected" &&
+      !!active &&
+      active.status === "connected" &&
       !isSending &&
       text.trim().length > 0 &&
       text.length <= 10000
     );
-  }, [isSending, status, text]);
+  }, [activeDeviceId, devices, isSending, text]);
 
   const canRestore = useMemo(() => {
     return hasLastSent();
@@ -77,7 +114,15 @@ export default function App() {
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    if (status !== "connected" || isSending) return;
+    if (!activeDeviceId) {
+      showToast(t("devices.selectDevice"), "error");
+      return;
+    }
+    const active = devices.find((d) => d.id === activeDeviceId);
+    if (!active || active.status !== "connected" || isSending) {
+      showToast(t("devices.deviceNotConnected"), "error");
+      return;
+    }
 
     if (trimmed.length > 10000) {
       showToast(t("input.textTooLong"), "error");
@@ -87,16 +132,15 @@ export default function App() {
     saveLastSent(trimmed);
     clearDraft();
 
-    const ok = send(trimmed);
+    const ok = sendToActive(trimmed);
     if (!ok) {
-      showToast(t("notifications.sendFailed"), "error");
+      showToast(t("devices.sendFailed"), "error");
       return;
     }
 
     setText("");
     setShowRestore(true);
-    showToast(t("notifications.sent"), "success");
-  }, [isSending, send, showToast, status, t, text]);
+  }, [activeDeviceId, devices, isSending, sendToActive, showToast, t, text]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -128,11 +172,42 @@ export default function App() {
     setPage("main");
   }, []);
 
+  const handleAddDevice = useCallback(
+    (url: string, name?: string) => {
+      return addDevice(url, name);
+    },
+    [addDevice],
+  );
+
+  const handleRemoveDevice = useCallback(
+    (deviceId: string) => {
+      removeDevice(deviceId);
+      if (renameDeviceId === deviceId) {
+        setRenameDeviceId(null);
+        setShowRename(false);
+      }
+    },
+    [removeDevice, renameDeviceId],
+  );
+
+  const handleRenameDevice = useCallback((deviceId: string) => {
+    setRenameDeviceId(deviceId);
+    setShowRename(true);
+  }, []);
+
+  const handleSaveRename = useCallback(
+    (newName: string) => {
+      if (!renameDeviceId) return;
+      renameDevice(renameDeviceId, newName);
+    },
+    [renameDevice, renameDeviceId],
+  );
+
   if (page === "settings") {
     return <SettingsPage onBack={handleBackFromSettings} />;
   }
 
-  if (!i18nReady) {
+  if (!i18nReady || !isInitialized) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-teal-50 via-white to-cyan-50 p-4 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
         <div className="flex flex-col items-center gap-3">
@@ -154,18 +229,24 @@ export default function App() {
       </div>
 
       <div className="relative mx-auto max-w-md">
-        <StatusIndicator
-          status={status}
-          reconnectAttempts={reconnectAttempts}
+        <DeviceTabs
+          devices={devices}
+          activeDeviceId={activeDeviceId}
+          onSelect={setActiveDevice}
+          onRemove={handleRemoveDevice}
+          onRename={handleRenameDevice}
+          onAdd={() => setShowAddDevice(true)}
         />
 
         {/* Main glass card */}
-        <div className="animate-slide-up mt-0 p-0 rounded-3xl">
+        <div className="animate-slide-up mt-3 rounded-3xl p-0">
           <TextInput
             value={text}
             onChange={setText}
             onKeyDown={handleKeyDown}
-            disabled={status !== "connected"}
+            disabled={
+              devices.find((d) => d.id === activeDeviceId)?.status !== "connected"
+            }
             onOpenSettings={handleOpenSettings}
           />
 
@@ -189,6 +270,22 @@ export default function App() {
           onClose={() => removeToast(toast.id)}
         />
       ))}
+
+      <AddDeviceModal
+        isOpen={showAddDevice}
+        onClose={() => setShowAddDevice(false)}
+        onAdd={handleAddDevice}
+      />
+
+      <DeviceNameEditor
+        isOpen={showRename}
+        currentName={devices.find((d) => d.id === renameDeviceId)?.name ?? ""}
+        onSave={handleSaveRename}
+        onClose={() => {
+          setShowRename(false);
+          setRenameDeviceId(null);
+        }}
+      />
     </div>
   );
 }
