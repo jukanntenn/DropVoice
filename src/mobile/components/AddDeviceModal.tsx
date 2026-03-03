@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { QRScanner } from "./QRScanner";
 import { normalizeToWebSocketUrl } from "../utils/deviceStorage";
+import { checkCameraSupport } from "../utils/cameraSupport";
 
 type Tab = "scan" | "input";
 
@@ -18,8 +19,22 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
   const [urlInput, setUrlInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const autoSwitchTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (autoSwitchTimerRef.current !== null) {
+        window.clearTimeout(autoSwitchTimerRef.current);
+        autoSwitchTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const reset = useCallback(() => {
+    if (autoSwitchTimerRef.current !== null) {
+      window.clearTimeout(autoSwitchTimerRef.current);
+      autoSwitchTimerRef.current = null;
+    }
     setIsScanning(false);
     setUrlInput("");
     setNameInput("");
@@ -127,6 +142,26 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
         <div className="max-h-[75vh] overflow-y-auto p-4">
           {tab === "scan" ? (
             <div className="space-y-4">
+              <div className="rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                <div className="flex items-start gap-2">
+                  <svg
+                    className="mt-0.5 h-5 w-5 flex-shrink-0"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <div>
+                    <p className="font-medium">{t("devices.hintTitle")}</p>
+                    <p className="mt-1">{t("devices.scanHintHttps")}</p>
+                  </div>
+                </div>
+              </div>
+
               {isScanning ? (
                 <QRScanner
                   onScan={onScan}
@@ -144,7 +179,44 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
 
               <button
                 type="button"
-                onClick={() => setIsScanning((v) => !v)}
+                onClick={async () => {
+                  if (isScanning) {
+                    setIsScanning(false);
+                    return;
+                  }
+
+                  setError(null);
+                  const result = await checkCameraSupport();
+                  if (!result.supported) {
+                    const message =
+                      result.reason === "INSECURE_CONTEXT"
+                        ? t("devices.cameraRequiresHttpsAutoSwitch")
+                        : result.reason === "MEDIA_DEVICES_UNAVAILABLE"
+                          ? t("devices.cameraNotSupported")
+                          : result.reason === "PERMISSION_DENIED"
+                            ? t("devices.cameraPermissionDenied")
+                            : result.reason === "NO_CAMERA"
+                              ? t("devices.cameraNotFound")
+                              : t("devices.cameraInitFailed", {
+                                  reason: result.detail ?? "",
+                                });
+
+                    setError(message);
+
+                    if (autoSwitchTimerRef.current !== null) {
+                      window.clearTimeout(autoSwitchTimerRef.current);
+                    }
+                    autoSwitchTimerRef.current = window.setTimeout(() => {
+                      setTab("input");
+                      setIsScanning(false);
+                      setError(null);
+                      autoSwitchTimerRef.current = null;
+                    }, 2000);
+                    return;
+                  }
+
+                  setIsScanning(true);
+                }}
                 className={[
                   "w-full rounded-2xl py-3 font-medium transition-colors",
                   isScanning
@@ -196,11 +268,27 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
             </div>
           )}
 
-          {error ? (
+          {error && (
             <div className="mt-4 rounded-2xl bg-red-100 px-4 py-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">
-              {error}
+              <div className="flex items-start gap-2">
+                <svg
+                  className="mt-0.5 h-5 w-5 flex-shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <div>
+                  <p className="font-medium">{t("devices.cameraUnavailableTitle")}</p>
+                  <p className="mt-1">{error}</p>
+                </div>
+              </div>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

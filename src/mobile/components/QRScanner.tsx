@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Html5Qrcode } from "html5-qrcode";
 
 interface QRScannerProps {
@@ -7,12 +8,15 @@ interface QRScannerProps {
 }
 
 export function QRScanner({ onScan, onError }: QRScannerProps) {
+  const { t } = useTranslation();
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isStoppedRef = useRef(false);
   const initTimerRef = useRef<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     isStoppedRef.current = false;
+    setIsLoading(true);
     const initWithRetry = (attempt = 0) => {
       if (isStoppedRef.current) return;
 
@@ -21,7 +25,8 @@ export function QRScanner({ onScan, onError }: QRScannerProps) {
         if (attempt < 20) {
           initTimerRef.current = window.setTimeout(() => initWithRetry(attempt + 1), 50);
         } else {
-          onError?.("Scanner element not found after retries");
+          setIsLoading(false);
+          onError?.(t("devices.cameraInitFailed", { reason: "Scanner element not found" }));
         }
         return;
       }
@@ -37,22 +42,56 @@ export function QRScanner({ onScan, onError }: QRScannerProps) {
             (decodedText) => {
               if (isStoppedRef.current) return;
               isStoppedRef.current = true;
+              setIsLoading(false);
               onScan(decodedText);
               scanner.stop().catch(() => {});
             },
             (errorMessage) => {
               const msg = String(errorMessage);
               if (msg.includes("No barcode") || msg.includes("NotFoundException")) return;
+              if (msg.includes("NotAllowedError") || msg.includes("Permission denied")) {
+                onError?.(t("devices.cameraPermissionDenied"));
+                return;
+              }
+              if (msg.includes("NotFoundError")) {
+                onError?.(t("devices.cameraNotFound"));
+                return;
+              }
+              if (msg.includes("NotReadableError")) {
+                onError?.(t("devices.cameraInUse"));
+                return;
+              }
               onError?.(msg);
             },
           )
+          .then(() => {
+            setIsLoading(false);
+          })
           .catch((err) => {
+            setIsLoading(false);
             const msg =
               err && typeof err === "object" && "message" in err ? String(err.message) : String(err);
-            onError?.(`Camera init failed: ${msg}`);
+            if (msg.includes("NotAllowedError") || msg.includes("Permission denied")) {
+              onError?.(t("devices.cameraPermissionDenied"));
+              return;
+            }
+            if (msg.includes("NotFoundError")) {
+              onError?.(t("devices.cameraNotFound"));
+              return;
+            }
+            if (msg.includes("NotReadableError")) {
+              onError?.(t("devices.cameraInUse"));
+              return;
+            }
+            onError?.(t("devices.cameraInitFailed", { reason: msg }));
           });
       } catch (err) {
-        onError?.(`Scanner init failed: ${err instanceof Error ? err.message : String(err)}`);
+        setIsLoading(false);
+        onError?.(
+          t("devices.cameraInitFailed", {
+            reason: err instanceof Error ? err.message : String(err),
+          }),
+        );
       }
     };
 
@@ -68,12 +107,19 @@ export function QRScanner({ onScan, onError }: QRScannerProps) {
       scannerRef.current = null;
       scanner?.stop().catch(() => {});
     };
-  }, [onError, onScan]);
+  }, [onError, onScan, t]);
 
   return (
-    <div
-      id="qr-scanner"
-      className="w-full aspect-square bg-black rounded-2xl overflow-hidden"
-    />
+    <div className="relative w-full aspect-square overflow-hidden rounded-2xl bg-black">
+      {isLoading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900">
+          <div className="text-center">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <p className="mt-3 text-sm text-white">{t("devices.startingCamera")}</p>
+          </div>
+        </div>
+      )}
+      <div id="qr-scanner" className="h-full w-full" />
+    </div>
   );
 }
