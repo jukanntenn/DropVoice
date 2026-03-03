@@ -168,6 +168,11 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
                   placeholder={t("devices.urlPlaceholder")}
                   className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-primary/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 />
+                {normalizedUrl && normalizedUrl !== urlInput.trim() ? (
+                  <div className="mt-1 px-1 text-xs text-slate-500 dark:text-slate-400">
+                    {t("devices.willConnectTo", { url: normalizedUrl })}
+                  </div>
+                ) : null}
               </div>
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">

@@ -36,6 +36,7 @@ export default function App() {
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [renameDeviceId, setRenameDeviceId] = useState<string | null>(null);
   const [showRename, setShowRename] = useState(false);
+  const [isStabilizing, setIsStabilizing] = useState(true);
 
   const { t } = useTranslation();
   const { toasts, showToast, removeToast } = useToast();
@@ -70,6 +71,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!isInitialized) {
+      setIsStabilizing(true);
+      return;
+    }
+
+    setIsStabilizing(true);
+    const timer = window.setTimeout(() => {
+      setIsStabilizing(false);
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [isInitialized]);
+
+  useEffect(() => {
     const draft = loadDraft();
     if (draft) setText(draft);
     setShowRestore(hasLastSent());
@@ -93,6 +108,7 @@ export default function App() {
   }, [clearError, lastError, showToast, t]);
 
   const canSend = useMemo(() => {
+    if (isStabilizing) return false;
     const active = devices.find((d) => d.id === activeDeviceId);
     return (
       !!active &&
@@ -101,7 +117,7 @@ export default function App() {
       text.trim().length > 0 &&
       text.length <= 10000
     );
-  }, [activeDeviceId, devices, isSending, text]);
+  }, [activeDeviceId, devices, isSending, isStabilizing, text]);
 
   const canRestore = useMemo(() => {
     return hasLastSent();
@@ -114,6 +130,7 @@ export default function App() {
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    if (isStabilizing) return;
     if (!activeDeviceId) {
       showToast(t("devices.selectDevice"), "error");
       return;
@@ -140,7 +157,7 @@ export default function App() {
 
     setText("");
     setShowRestore(true);
-  }, [activeDeviceId, devices, isSending, sendToActive, showToast, t, text]);
+  }, [activeDeviceId, devices, isSending, isStabilizing, sendToActive, showToast, t, text]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -245,6 +262,7 @@ export default function App() {
             onChange={setText}
             onKeyDown={handleKeyDown}
             disabled={
+              isStabilizing ||
               devices.find((d) => d.id === activeDeviceId)?.status !== "connected"
             }
             onOpenSettings={handleOpenSettings}
@@ -255,7 +273,7 @@ export default function App() {
             <SendButton
               onClick={handleSend}
               disabled={!canSend}
-              isSending={isSending}
+              isSending={isSending || isStabilizing}
             />
             <ClearButton onClick={handleClearInput} disabled={!canClear} />
           </div>

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Device } from "../types";
 import {
   deviceToStored,
+  generateDeviceId,
+  getDefaultDeviceName,
   loadDeviceStorage,
   saveDeviceStorage,
   storedToDevice,
@@ -22,7 +24,28 @@ export function useDeviceManager(): UseDeviceManagerReturn {
 
   useEffect(() => {
     const storage = loadDeviceStorage();
-    const loadedDevices = storage.devices.map(storedToDevice);
+    let loadedDevices = storage.devices.map(storedToDevice);
+
+    if (loadedDevices.length === 0) {
+      const currentHost = window.location.host;
+      const protocol = window.location.protocol;
+      if (currentHost && protocol !== "file:") {
+        const wsProtocol = protocol === "https:" ? "wss" : "ws";
+        const wsUrl = `${wsProtocol}://${currentHost}/ws`;
+        const autoDevice: Device = {
+          id: generateDeviceId(),
+          name: getDefaultDeviceName(wsUrl),
+          url: wsUrl,
+          status: "disconnected",
+          lastConnected: Date.now(),
+        };
+        loadedDevices = [autoDevice];
+        saveDeviceStorage({
+          devices: [deviceToStored(autoDevice)],
+          lastActiveDeviceId: autoDevice.id,
+        });
+      }
+    }
     setDevices(loadedDevices);
 
     const hasStoredActive =
