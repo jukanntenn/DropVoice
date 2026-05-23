@@ -1,8 +1,0 @@
-{
-  "id": "02-25-fix-incomplete-input",
-  "title": "Fix incomplete text input with buffered input mode",
-  "status": "completed",
-  "phase": "implementation",
-  "created": "2025-02-25",
-  "owner": "alice"
-}
