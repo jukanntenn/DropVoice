@@ -19,13 +19,20 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
   const [urlInput, setUrlInput] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [addedCount, setAddedCount] = useState(0);
+  const [lastAdded, setLastAdded] = useState<string | null>(null);
   const autoSwitchTimerRef = useRef<number | null>(null);
+  const lastAddedTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
       if (autoSwitchTimerRef.current !== null) {
         window.clearTimeout(autoSwitchTimerRef.current);
         autoSwitchTimerRef.current = null;
+      }
+      if (lastAddedTimerRef.current !== null) {
+        window.clearTimeout(lastAddedTimerRef.current);
+        lastAddedTimerRef.current = null;
       }
     };
   }, []);
@@ -35,11 +42,17 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
       window.clearTimeout(autoSwitchTimerRef.current);
       autoSwitchTimerRef.current = null;
     }
+    if (lastAddedTimerRef.current !== null) {
+      window.clearTimeout(lastAddedTimerRef.current);
+      lastAddedTimerRef.current = null;
+    }
     setIsScanning(false);
     setUrlInput("");
     setNameInput("");
     setError(null);
     setTab("scan");
+    setAddedCount(0);
+    setLastAdded(null);
   }, []);
 
   const close = useCallback(() => {
@@ -68,9 +81,19 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
         return;
       }
       const ok = onAdd(wsUrl);
-      if (ok) close();
+      if (ok) {
+        setAddedCount((c) => c + 1);
+        setLastAdded(wsUrl);
+        setError(null);
+        if (lastAddedTimerRef.current !== null) {
+          window.clearTimeout(lastAddedTimerRef.current);
+        }
+        lastAddedTimerRef.current = window.setTimeout(() => {
+          setLastAdded(null);
+        }, 2000);
+      }
     },
-    [close, onAdd, t],
+    [onAdd, t],
   );
 
   if (!isOpen) return null;
@@ -79,8 +102,15 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
       <div className="flex w-full max-w-md flex-col overflow-hidden rounded-3xl bg-white shadow-xl dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-          <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            {t("devices.addDevice")}
+          <div className="flex items-center gap-2">
+            <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              {t("devices.addDevice")}
+            </div>
+            {addedCount > 0 && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                {t("devices.scanAddedCount", { count: addedCount })}
+              </span>
+            )}
           </div>
           <button
             type="button"
@@ -163,12 +193,25 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
               </div>
 
               {isScanning ? (
-                <QRScanner
-                  onScan={onScan}
-                  onError={(e) => {
-                    setError(e);
-                  }}
-                />
+                <div className="relative">
+                  <QRScanner
+                    onScan={onScan}
+                    onError={(e) => {
+                      setError(e);
+                    }}
+                    continuous
+                  />
+                  {lastAdded && (
+                    <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-black/40">
+                      <div className="flex items-center gap-2 rounded-xl bg-white/90 px-4 py-2 text-sm font-medium text-green-700 dark:bg-slate-800/90 dark:text-green-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+                        </svg>
+                        {t("devices.added")}
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200 bg-slate-50 px-4 py-10 text-center dark:border-slate-800 dark:bg-slate-950/40">
                   <div className="text-sm text-slate-600 dark:text-slate-300">
@@ -224,7 +267,7 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
                     : "bg-primary text-white hover:bg-primary/90",
                 ].join(" ")}
               >
-                {isScanning ? t("devices.stopScan") : t("devices.startScan")}
+                {isScanning ? t("devices.done") : t("devices.startScan")}
               </button>
             </div>
           ) : (

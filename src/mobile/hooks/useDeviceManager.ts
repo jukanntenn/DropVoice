@@ -46,6 +46,7 @@ export function useDeviceManager(): UseDeviceManagerReturn {
         });
       }
     }
+    loadedDevices.sort((a, b) => b.lastConnected - a.lastConnected);
     setDevices(loadedDevices);
 
     const hasStoredActive =

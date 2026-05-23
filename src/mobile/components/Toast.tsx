@@ -45,6 +45,7 @@ interface ToastData {
   id: number;
   message: string;
   type: "success" | "error";
+  duration?: number;
 }
 
 let nextToastId = 0;
@@ -52,9 +53,9 @@ let nextToastId = 0;
 export function useToast() {
   const [toasts, setToasts] = useState<ToastData[]>([]);
 
-  const showToast = (message: string, type: ToastData["type"] = "success") => {
+  const showToast = (message: string, type: ToastData["type"] = "success", duration?: number) => {
     const id = (nextToastId += 1);
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message, type, duration }]);
   };
 
   const removeToast = (id: number) => {

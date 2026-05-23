@@ -5,13 +5,15 @@ import { Html5Qrcode } from "html5-qrcode";
 interface QRScannerProps {
   onScan: (text: string) => void;
   onError?: (error: string) => void;
+  continuous?: boolean;
 }
 
-export function QRScanner({ onScan, onError }: QRScannerProps) {
+export function QRScanner({ onScan, onError, continuous }: QRScannerProps) {
   const { t } = useTranslation();
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const isStoppedRef = useRef(false);
   const initTimerRef = useRef<number | null>(null);
+  const cooldownRef = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -41,10 +43,20 @@ export function QRScanner({ onScan, onError }: QRScannerProps) {
             { fps: 10, qrbox: { width: 250, height: 250 } },
             (decodedText) => {
               if (isStoppedRef.current) return;
-              isStoppedRef.current = true;
-              setIsLoading(false);
+              if (cooldownRef.current) return;
+
               onScan(decodedText);
-              scanner.stop().catch(() => {});
+
+              if (continuous) {
+                cooldownRef.current = true;
+                setTimeout(() => {
+                  cooldownRef.current = false;
+                }, 1000);
+              } else {
+                isStoppedRef.current = true;
+                setIsLoading(false);
+                scanner.stop().catch(() => {});
+              }
             },
             (errorMessage) => {
               const msg = String(errorMessage);
@@ -107,7 +119,7 @@ export function QRScanner({ onScan, onError }: QRScannerProps) {
       scannerRef.current = null;
       scanner?.stop().catch(() => {});
     };
-  }, [onError, onScan, t]);
+  }, [onError, onScan, t, continuous]);
 
   return (
     <div className="relative w-full aspect-square overflow-hidden rounded-2xl bg-black">

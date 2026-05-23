@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Device } from "../types";
+import type { Device, DeviceErrorType } from "../types";
 import { generateDeviceId, getDefaultDeviceName, MAX_DEVICES } from "../utils/deviceStorage";
 
 const MAX_RECONNECT_ATTEMPTS = 5;
 const SEND_TIMEOUT_MS = 3000;
+const QUICK_FAIL_THRESHOLD_MS = 1000;
+const SLOW_FAIL_THRESHOLD_MS = 5000;
 
 type ConnectionEntry = {
   ws: WebSocket;
   url: string;
   reconnectAttempts: number;
   reconnectTimer: number | null;
+  openTimestamp: number;
 };
 
 interface UseMultiWebSocketReturn {
@@ -22,6 +25,7 @@ interface UseMultiWebSocketReturn {
   removeDevice: (deviceId: string) => void;
   renameDevice: (deviceId: string, newName: string) => void;
   setActiveDevice: (deviceId: string) => void;
+  retryDevice: (deviceId: string) => void;
   sendToActive: (text: string) => boolean;
 }
 
@@ -69,7 +73,10 @@ export function useMultiWebSocket(
 
   const scheduleReconnect = useCallback(
     (device: Device, prev: ConnectionEntry) => {
-      if (prev.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return;
+      if (prev.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        updateDevice(device.id, { hasExhaustedRetries: true });
+        return;
+      }
       const nextAttempts = prev.reconnectAttempts + 1;
       const delay = Math.min(1000 * 2 ** (nextAttempts - 1), 10000);
 
@@ -90,6 +97,7 @@ export function useMultiWebSocket(
         url: prev.url,
         reconnectAttempts: nextAttempts,
         reconnectTimer: timer,
+        openTimestamp: prev.openTimestamp,
       });
     },
     [updateDevice],
@@ -108,15 +116,17 @@ export function useMultiWebSocket(
         connectionsRef.current.delete(device.id);
       }
 
-      updateDevice(device.id, { status: "connecting" });
+      updateDevice(device.id, { status: "connecting", errorType: undefined });
 
       try {
         const ws = new WebSocket(device.url);
+        const openTimestamp = Date.now();
         connectionsRef.current.set(device.id, {
           ws,
           url: device.url,
           reconnectAttempts,
           reconnectTimer: null,
+          openTimestamp,
         });
 
         ws.onopen = () => {
@@ -125,10 +135,13 @@ export function useMultiWebSocket(
             url: device.url,
             reconnectAttempts: 0,
             reconnectTimer: null,
+            openTimestamp: Date.now(),
           });
           updateDevice(device.id, {
             status: "connected",
             lastConnected: Date.now(),
+            hasExhaustedRetries: false,
+            errorType: undefined,
           });
           clearError();
           setIsSending(false);
@@ -155,13 +168,22 @@ export function useMultiWebSocket(
           const current = connectionsRef.current.get(device.id);
           if (!current || current.ws !== ws) return;
           connectionsRef.current.delete(device.id);
-          updateDevice(device.id, { status: "disconnected" });
+
+          const elapsed = Date.now() - current.openTimestamp;
+          let errorType: DeviceErrorType = "unreachable";
+          if (elapsed < QUICK_FAIL_THRESHOLD_MS) {
+            errorType = "refused";
+          } else if (elapsed > SLOW_FAIL_THRESHOLD_MS) {
+            errorType = "timeout";
+          }
+
+          updateDevice(device.id, { status: "disconnected", errorType });
           clearSendTimer();
           setIsSending(false);
           scheduleReconnect(device, { ...current, ws });
         };
       } catch {
-        updateDevice(device.id, { status: "disconnected" });
+        updateDevice(device.id, { status: "disconnected", errorType: "unreachable" });
       }
     },
     [clearError, clearSendTimer, scheduleReconnect, updateDevice],
@@ -278,6 +300,16 @@ export function useMultiWebSocket(
     [setActiveDeviceId],
   );
 
+  const retryDevice = useCallback(
+    (deviceId: string) => {
+      const device = devicesRef.current.find((d) => d.id === deviceId);
+      if (!device) return;
+      updateDevice(deviceId, { hasExhaustedRetries: false, errorType: undefined });
+      connect(device, 0);
+    },
+    [connect, updateDevice],
+  );
+
   const sendToActive = useCallback(
     (text: string) => {
       const deviceId = activeDeviceIdRef.current;
@@ -317,6 +349,7 @@ export function useMultiWebSocket(
       removeDevice,
       renameDevice,
       setActiveDevice,
+      retryDevice,
       sendToActive,
     }),
     [
@@ -330,6 +363,7 @@ export function useMultiWebSocket(
       renameDevice,
       sendToActive,
       setActiveDevice,
+      retryDevice,
     ],
   );
 }

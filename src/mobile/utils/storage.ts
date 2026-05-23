@@ -1,50 +1,56 @@
 const host = window.location.host;
-const DRAFT_KEY = `dropvoice_draft_${host}`;
-const LAST_SENT_KEY = `dropvoice_last_sent_${host}`;
 
-export function saveDraft(text: string): void {
+function draftKey(deviceId: string): string {
+  return `dropvoice_draft_${host}_${deviceId}`;
+}
+
+function lastSentKey(deviceId: string): string {
+  return `dropvoice_last_sent_${host}_${deviceId}`;
+}
+
+export function saveDraft(text: string, deviceId: string): void {
   try {
-    localStorage.setItem(DRAFT_KEY, text);
+    localStorage.setItem(draftKey(deviceId), text);
   } catch {}
 }
 
-export function loadDraft(): string | null {
+export function loadDraft(deviceId: string): string | null {
   try {
-    return localStorage.getItem(DRAFT_KEY);
+    return localStorage.getItem(draftKey(deviceId));
   } catch {
     return null;
   }
 }
 
-export function clearDraft(): void {
+export function clearDraft(deviceId: string): void {
   try {
-    localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(draftKey(deviceId));
   } catch {}
 }
 
-export function saveLastSent(text: string): void {
+export function saveLastSent(text: string, deviceId: string): void {
   try {
-    localStorage.setItem(LAST_SENT_KEY, text);
+    localStorage.setItem(lastSentKey(deviceId), text);
   } catch {}
 }
 
-export function loadLastSent(): string | null {
+export function loadLastSent(deviceId: string): string | null {
   try {
-    return localStorage.getItem(LAST_SENT_KEY);
+    return localStorage.getItem(lastSentKey(deviceId));
   } catch {
     return null;
   }
 }
 
-export function clearLastSent(): void {
+export function clearLastSent(deviceId: string): void {
   try {
-    localStorage.removeItem(LAST_SENT_KEY);
+    localStorage.removeItem(lastSentKey(deviceId));
   } catch {}
 }
 
-export function hasLastSent(): boolean {
+export function hasLastSent(deviceId: string): boolean {
   try {
-    return localStorage.getItem(LAST_SENT_KEY) !== null;
+    return localStorage.getItem(lastSentKey(deviceId)) !== null;
   } catch {
     return false;
   }

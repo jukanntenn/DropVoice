@@ -1,7 +1,8 @@
 import type React from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AddDeviceModal } from "./components/AddDeviceModal";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 import { DeviceNameEditor } from "./components/DeviceNameEditor";
 import { DeviceTabs } from "./components/DeviceTabs";
 import { TextInput } from "./components/TextInput";
@@ -31,12 +32,14 @@ export default function App() {
 
   const [i18nReady, setI18nReady] = useState(false);
   const [text, setText] = useState("");
-  const [showRestore, setShowRestore] = useState(false);
 
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [renameDeviceId, setRenameDeviceId] = useState<string | null>(null);
   const [showRename, setShowRename] = useState(false);
-  const [isStabilizing, setIsStabilizing] = useState(true);
+  const [removeDeviceId, setRemoveDeviceId] = useState<string | null>(null);
+
+  const prevActiveDeviceIdRef = useRef<string | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const { t } = useTranslation();
   const { toasts, showToast, removeToast } = useToast();
@@ -58,6 +61,7 @@ export default function App() {
     removeDevice,
     renameDevice,
     setActiveDevice,
+    retryDevice,
     sendToActive,
   } = useMultiWebSocket(
     managedDevices,
@@ -66,36 +70,69 @@ export default function App() {
     setActiveDeviceId,
   );
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (!touchStartRef.current) return;
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - touchStartRef.current.x;
+      const dy = touch.clientY - touchStartRef.current.y;
+      touchStartRef.current = null;
+
+      if (Math.abs(dx) < 80 || Math.abs(dy) > Math.abs(dx) * 0.5) return;
+
+      const sorted = [...devices].sort((a, b) => b.lastConnected - a.lastConnected);
+      const currentIdx = sorted.findIndex((d) => d.id === activeDeviceId);
+      if (currentIdx < 0) return;
+
+      if (dx < 0 && currentIdx < sorted.length - 1) {
+        setActiveDevice(sorted[currentIdx + 1].id);
+      } else if (dx > 0 && currentIdx > 0) {
+        setActiveDevice(sorted[currentIdx - 1].id);
+      }
+    },
+    [activeDeviceId, devices, setActiveDevice],
+  );
+
   useEffect(() => {
     initMobileI18n().then(() => setI18nReady(true));
   }, []);
 
+  // Save current draft for old device, load draft for new device on switch
   useEffect(() => {
-    if (!isInitialized) {
-      setIsStabilizing(true);
-      return;
+    const prevId = prevActiveDeviceIdRef.current;
+    const newId = activeDeviceId;
+
+    if (prevId && prevId !== newId) {
+      saveDraft(text, prevId);
+      const switchedDevice = devices.find((d) => d.id === newId);
+      if (switchedDevice) {
+        showToast(t("devices.switchedTo", { name: switchedDevice.name }), "success", 1500);
+      }
     }
 
-    setIsStabilizing(true);
-    const timer = window.setTimeout(() => {
-      setIsStabilizing(false);
-    }, 2000);
+    if (newId) {
+      const draft = loadDraft(newId);
+      setText(draft ?? "");
+    } else {
+      setText("");
+    }
 
-    return () => window.clearTimeout(timer);
-  }, [isInitialized]);
+    prevActiveDeviceIdRef.current = newId;
+  }, [activeDeviceId]);
 
+  // Debounced draft save for active device
   useEffect(() => {
-    const draft = loadDraft();
-    if (draft) setText(draft);
-    setShowRestore(hasLastSent());
-  }, []);
-
-  useEffect(() => {
+    if (!activeDeviceId) return;
     const timer = window.setTimeout(() => {
-      saveDraft(text);
+      saveDraft(text, activeDeviceId);
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [text]);
+  }, [text, activeDeviceId]);
 
   useEffect(() => {
     if (!lastError) return;
@@ -108,7 +145,6 @@ export default function App() {
   }, [clearError, lastError, showToast, t]);
 
   const canSend = useMemo(() => {
-    if (isStabilizing) return false;
     const active = devices.find((d) => d.id === activeDeviceId);
     return (
       !!active &&
@@ -117,11 +153,11 @@ export default function App() {
       text.trim().length > 0 &&
       text.length <= 10000
     );
-  }, [activeDeviceId, devices, isSending, isStabilizing, text]);
+  }, [activeDeviceId, devices, isSending, text]);
 
   const canRestore = useMemo(() => {
-    return hasLastSent();
-  }, [showRestore]);
+    return activeDeviceId ? hasLastSent(activeDeviceId) : false;
+  }, [activeDeviceId, toasts]);
 
   const canClear = useMemo(() => {
     return text.trim().length > 0;
@@ -130,7 +166,6 @@ export default function App() {
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    if (isStabilizing) return;
     if (!activeDeviceId) {
       showToast(t("devices.selectDevice"), "error");
       return;
@@ -146,8 +181,8 @@ export default function App() {
       return;
     }
 
-    saveLastSent(trimmed);
-    clearDraft();
+    saveLastSent(trimmed, activeDeviceId);
+    clearDraft(activeDeviceId);
 
     const ok = sendToActive(trimmed);
     if (!ok) {
@@ -156,8 +191,7 @@ export default function App() {
     }
 
     setText("");
-    setShowRestore(true);
-  }, [activeDeviceId, devices, isSending, isStabilizing, sendToActive, showToast, t, text]);
+  }, [activeDeviceId, devices, isSending, sendToActive, showToast, t, text]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -170,16 +204,17 @@ export default function App() {
   );
 
   const handleRestore = useCallback(() => {
-    const last = loadLastSent();
+    if (!activeDeviceId) return;
+    const last = loadLastSent(activeDeviceId);
     if (!last) return;
     setText(last);
     showToast(t("notifications.lastMessageRestored"), "success");
-  }, [showToast, t]);
+  }, [activeDeviceId, showToast, t]);
 
   const handleClearInput = useCallback(() => {
     setText("");
-    clearDraft();
-  }, []);
+    if (activeDeviceId) clearDraft(activeDeviceId);
+  }, [activeDeviceId]);
 
   const handleOpenSettings = useCallback(() => {
     setPage("settings");
@@ -198,14 +233,20 @@ export default function App() {
 
   const handleRemoveDevice = useCallback(
     (deviceId: string) => {
-      removeDevice(deviceId);
-      if (renameDeviceId === deviceId) {
-        setRenameDeviceId(null);
-        setShowRename(false);
-      }
+      setRemoveDeviceId(deviceId);
     },
-    [removeDevice, renameDeviceId],
+    [],
   );
+
+  const handleConfirmRemove = useCallback(() => {
+    if (!removeDeviceId) return;
+    removeDevice(removeDeviceId);
+    if (renameDeviceId === removeDeviceId) {
+      setRenameDeviceId(null);
+      setShowRename(false);
+    }
+    setRemoveDeviceId(null);
+  }, [removeDevice, removeDeviceId, renameDeviceId]);
 
   const handleRenameDevice = useCallback((deviceId: string) => {
     setRenameDeviceId(deviceId);
@@ -252,6 +293,7 @@ export default function App() {
           onSelect={setActiveDevice}
           onRemove={handleRemoveDevice}
           onRename={handleRenameDevice}
+          onRetry={retryDevice}
           onAdd={() => setShowAddDevice(true)}
         />
 
@@ -262,18 +304,21 @@ export default function App() {
             onChange={setText}
             onKeyDown={handleKeyDown}
             disabled={
-              isStabilizing ||
               devices.find((d) => d.id === activeDeviceId)?.status !== "connected"
             }
             onOpenSettings={handleOpenSettings}
           />
 
-          <div className="mt-6 flex items-center justify-between px-1">
+          <div
+            className="mt-6 flex items-center justify-between px-1"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
             <RestoreButton onClick={handleRestore} disabled={!canRestore} />
             <SendButton
               onClick={handleSend}
               disabled={!canSend}
-              isSending={isSending || isStabilizing}
+              isSending={isSending}
             />
             <ClearButton onClick={handleClearInput} disabled={!canClear} />
           </div>
@@ -285,6 +330,7 @@ export default function App() {
           key={toast.id}
           message={toast.message}
           type={toast.type}
+          duration={toast.duration}
           onClose={() => removeToast(toast.id)}
         />
       ))}
@@ -303,6 +349,16 @@ export default function App() {
           setShowRename(false);
           setRenameDeviceId(null);
         }}
+      />
+
+      <ConfirmDialog
+        isOpen={removeDeviceId !== null}
+        title={t("devices.removeConfirmTitle")}
+        message={t("devices.removeConfirm", {
+          name: devices.find((d) => d.id === removeDeviceId)?.name ?? "",
+        })}
+        onConfirm={handleConfirmRemove}
+        onCancel={() => setRemoveDeviceId(null)}
       />
     </div>
   );
