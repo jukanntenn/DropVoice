@@ -1,11 +1,10 @@
-import type React from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsButton } from "./SettingsButton";
 
 interface TextInputProps {
   value: string;
   onChange: (value: string) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   disabled: boolean;
   onOpenSettings: () => void;
 }
@@ -13,11 +12,21 @@ interface TextInputProps {
 export function TextInput({
   value,
   onChange,
-  onKeyDown,
   disabled,
   onOpenSettings,
 }: TextInputProps) {
   const { t } = useTranslation();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   const charCount = value.length;
   const isOverLimit = charCount > 10000;
@@ -26,9 +35,9 @@ export function TextInput({
   return (
     <div className="group relative">
       <textarea
+        ref={textareaRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
         placeholder={t("input.placeholder")}
         disabled={disabled}
         rows={6}

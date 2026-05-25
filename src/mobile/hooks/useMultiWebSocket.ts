@@ -151,7 +151,7 @@ export function useMultiWebSocket(
         ws.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            if (data?.type === "confirm") {
+            if (data?.type === "ack" || data?.type === "confirm") {
               clearSendTimer();
               setIsSending(false);
             } else if (data?.type === "error") {

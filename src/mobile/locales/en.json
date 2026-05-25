@@ -1,0 +1,80 @@
+{
+  "status": {
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting...",
+    "reconnecting": "Reconnecting...",
+    "connectionLost": "Connection lost. Refresh to try again."
+  },
+  "input": {
+    "placeholder": "Type text to send to your PC...",
+    "restore": "Restore Last Message",
+    "charCount": "{{count}} / 10000",
+    "textTooLong": "Text too long (max 10000 characters)"
+  },
+  "actions": {
+    "send": "Send to PC",
+    "sending": "Sending..."
+  },
+  "notifications": {
+    "sent": "Text sent successfully!",
+    "lastMessageRestored": "Last message restored",
+    "sendFailed": "Failed to send text"
+  },
+  "devices": {
+    "add": "Add",
+    "added": "Device added!",
+    "emptyState": "No devices yet. Tap Add to connect.",
+    "addDevice": "Add Device",
+    "scanQR": "Scan QR",
+    "inputUrl": "Enter URL",
+    "startScan": "Start Scan",
+    "stopScan": "Stop Scan",
+    "done": "Done",
+    "scanHint": "Tap Start Scan and scan the QR on your PC.",
+    "hintTitle": "Hint",
+    "scanHintHttps": "Camera requires HTTPS or localhost. Please use manual input if scanning is unavailable.",
+    "scanAddedCount": "{{count}} device(s) added",
+    "connectionAddress": "Connection Address",
+    "deviceNameOptional": "Device name (optional)",
+    "urlPlaceholder": "http://192.168.1.100:38425",
+    "willConnectTo": "Will connect to: {{url}}",
+    "namePlaceholder": "Default: PC-xxx",
+    "renameDevice": "Rename Device",
+    "renameHint": "Long-press a device to rename it",
+    "cancel": "Cancel",
+    "save": "Save",
+    "retry": "Retry",
+    "selectDevice": "Please select a device first",
+    "deviceNotConnected": "Device not connected",
+    "invalidUrl": "Invalid address",
+    "sendFailed": "Send failed, please check connection",
+    "sendTimeout": "Send timed out, please retry",
+    "maxLimit": "Maximum 5 devices supported",
+    "alreadyExists": "Device already exists",
+    "removeConfirmTitle": "Remove Device",
+    "removeConfirm": "Remove {{name}}?",
+    "removeConfirmAction": "Remove",
+    "errorUnreachable": "Unreachable",
+    "errorRefused": "Refused",
+    "errorTimeout": "Timed out",
+    "errorUnknown": "Error",
+    "switchedTo": "Switched to {{name}}",
+    "cameraUnavailableTitle": "Cannot access camera",
+    "cameraRequiresHttpsAutoSwitch": "Camera requires HTTPS or localhost. Switched to manual input.",
+    "cameraPermissionDenied": "Camera permission denied. Please allow camera access in browser settings.",
+    "cameraNotSupported": "Your browser doesn't support camera",
+    "cameraNotFound": "No camera device found.",
+    "cameraInUse": "Camera is being used by another application.",
+    "startingCamera": "Starting camera...",
+    "cameraInitFailed": "Camera initialization failed: {{reason}}"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "theme": "Theme",
+    "themeSystem": "System",
+    "themeLight": "Light",
+    "themeDark": "Dark"
+  }
+}

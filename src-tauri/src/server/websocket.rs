@@ -162,6 +162,17 @@ async fn handle_connection(
                                     continue;
                                 }
 
+                                // Send immediate ack before starting injection
+                                if let Err(e) = ws_sender
+                                    .send(Message::Text(
+                                        serde_json::json!({"type": "ack"}).to_string()
+                                    ))
+                                    .await
+                                {
+                                    error!("Failed to send ack: {}", e);
+                                    break;
+                                }
+
                                 // Inject text
                                 let delay_ms = connection_manager.get_input_delay();
                                 match injector::inject_text(content, delay_ms) {

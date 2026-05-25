@@ -1,0 +1,80 @@
+{
+  "status": {
+    "connected": "接続済み",
+    "disconnected": "未接続",
+    "connecting": "接続中...",
+    "reconnecting": "再接続中...",
+    "connectionLost": "接続が切断されました。ページを更新して再試行してください。"
+  },
+  "input": {
+    "placeholder": "PCに送信するテキストを入力...",
+    "restore": "最後のメッセージを復元",
+    "charCount": "{{count}} / 10000",
+    "textTooLong": "テキストが長すぎます（最大10000文字）"
+  },
+  "actions": {
+    "send": "PCに送信",
+    "sending": "送信中..."
+  },
+  "notifications": {
+    "sent": "送信成功！",
+    "lastMessageRestored": "最後のメッセージを復元しました",
+    "sendFailed": "送信に失敗しました"
+  },
+  "devices": {
+    "add": "追加",
+    "added": "追加しました！",
+    "emptyState": "デバイスがありません。追加をタップして接続してください。",
+    "addDevice": "デバイスを追加",
+    "scanQR": "QRスキャン",
+    "inputUrl": "URLを入力",
+    "startScan": "スキャン開始",
+    "stopScan": "スキャン停止",
+    "done": "完了",
+    "scanHint": "スキャン開始をタップし、PCのQRコードをスキャンしてください。",
+    "hintTitle": "ヒント",
+    "scanHintHttps": "カメラにはHTTPSまたはlocalhostが必要です。スキャンできない場合は手動入力をお使いください。",
+    "scanAddedCount": "{{count}}台のデバイスを追加しました",
+    "connectionAddress": "接続先アドレス",
+    "deviceNameOptional": "デバイス名（任意）",
+    "urlPlaceholder": "http://192.168.1.100:38425",
+    "willConnectTo": "接続先: {{url}}",
+    "namePlaceholder": "デフォルト: PC-xxx",
+    "renameDevice": "デバイス名を変更",
+    "renameHint": "デバイスを長押しして名前を変更",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "retry": "再試行",
+    "selectDevice": "デバイスを選択してください",
+    "deviceNotConnected": "デバイスが接続されていません",
+    "invalidUrl": "無効なアドレス",
+    "sendFailed": "送信に失敗しました。接続を確認してください",
+    "sendTimeout": "送信がタイムしました。再試行してください",
+    "maxLimit": "最大5台のデバイスまでサポート",
+    "alreadyExists": "このデバイスは既に存在します",
+    "removeConfirmTitle": "デバイスを削除",
+    "removeConfirm": "{{name}}を削除しますか？",
+    "removeConfirmAction": "削除",
+    "errorUnreachable": "接続できません",
+    "errorRefused": "接続が拒否されました",
+    "errorTimeout": "接続がタイムしました",
+    "errorUnknown": "エラー",
+    "switchedTo": "{{name}}に切り替えました",
+    "cameraUnavailableTitle": "カメラにアクセスできません",
+    "cameraRequiresHttpsAutoSwitch": "カメラにはHTTPSまたはlocalhostが必要です。手動入力に切り替えました。",
+    "cameraPermissionDenied": "カメラの使用が拒否されました。ブラウザの設定でカメラへのアクセスを許可してください。",
+    "cameraNotSupported": "お使いのブラウザはカメラをサポートしていません",
+    "cameraNotFound": "カメラデバイスが見つかりません。",
+    "cameraInUse": "カメラが他のアプリケーションで使用中です。",
+    "startingCamera": "カメラを起動中...",
+    "cameraInitFailed": "カメラの初期化に失敗しました: {{reason}}"
+  },
+  "settings": {
+    "title": "設定",
+    "language": "言語",
+    "theme": "テーマ",
+    "themeSystem": "システムに従う",
+    "themeLight": "ライト",
+    "themeDark": "ダーク"
+  }
+}

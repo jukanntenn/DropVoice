@@ -27,8 +27,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const lang = i18n.language?.startsWith("zh") ? "zh" : "en";
-    document.documentElement.lang = lang;
+    document.documentElement.lang = i18n.language ?? "en";
   }, [i18n.language]);
 
   useEffect(() => {

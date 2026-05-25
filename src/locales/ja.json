@@ -1,0 +1,46 @@
+{
+  "app": {
+    "title": "DropVoice",
+    "loading": "サーバーを起動中...",
+    "error": "エラーが発生しました"
+  },
+  "connection": {
+    "scanQR": "QRコードをスキャンして接続",
+    "enterUrl": "またはブラウザでURLを入力",
+    "warning": "信頼できるLANネットワークでのみ使用してください"
+  },
+  "language": {
+    "switch": "Language / 言語",
+    "en": "English",
+    "zh": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語"
+  },
+  "copy": {
+    "button": "URLをコピー",
+    "copied": "コピーしました！"
+  },
+  "theme": {
+    "light": "ライトモード",
+    "dark": "ダークモード",
+    "system": "システムに従う"
+  },
+  "common": {
+    "dismiss": "閉じる"
+  },
+  "settings": {
+    "title": "設定",
+    "autoStart": {
+      "label": "ログイン時に起動",
+      "description": "システム起動時にDropVoiceを自動的に起動します"
+    },
+    "minimizeToTray": {
+      "label": "トレイに最小化",
+      "description": "閉じるボタンを押すとアプリを終了せずにシステムトレイに隠します"
+    },
+    "inputDelay": {
+      "label": "入力遅延",
+      "description": "文字間の遅延（ミリ秒）。入力が不完全な場合は増やし、より速く入力したい場合は減らしてください。"
+    }
+  }
+}

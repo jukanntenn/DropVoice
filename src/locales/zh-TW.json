@@ -1,0 +1,46 @@
+{
+  "app": {
+    "title": "DropVoice",
+    "loading": "正在啟動伺服器...",
+    "error": "發生錯誤"
+  },
+  "connection": {
+    "scanQR": "使用手機掃描 QR Code 連線",
+    "enterUrl": "或在瀏覽器手動輸入網址",
+    "warning": "僅在受信任的區域網路中使用"
+  },
+  "language": {
+    "switch": "Language / 語言",
+    "en": "English",
+    "zh": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語"
+  },
+  "copy": {
+    "button": "複製網址",
+    "copied": "已複製！"
+  },
+  "theme": {
+    "light": "淺色模式",
+    "dark": "深色模式",
+    "system": "跟隨系統"
+  },
+  "common": {
+    "dismiss": "關閉"
+  },
+  "settings": {
+    "title": "設定",
+    "autoStart": {
+      "label": "開機自啟動",
+      "description": "隨系統啟動自動執行 DropVoice"
+    },
+    "minimizeToTray": {
+      "label": "關閉時最小化到系統匣",
+      "description": "點擊關閉按鈕時隱藏到系統匣，而非結束應用程式"
+    },
+    "inputDelay": {
+      "label": "輸入延遲",
+      "description": "字元之間的延遲（毫秒）。如果輸入不完整請增加，想要更快輸入請減少。"
+    }
+  }
+}

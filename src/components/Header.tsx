@@ -22,7 +22,13 @@ export default function Header() {
   const [version, setVersion] = useState<string>("");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  const currentLang = i18n.language?.startsWith("zh") ? "zh" : "en";
+  const currentLang = (() => {
+    const lang = i18n.language?.toLowerCase() ?? "";
+    if (lang.startsWith("zh-tw") || lang.startsWith("zh-hk") || lang.startsWith("zh-hant")) return "zh-TW";
+    if (lang.startsWith("zh")) return "zh";
+    if (lang.startsWith("ja")) return "ja";
+    return "en";
+  })();
 
   useEffect(() => {
     let isActive = true;
@@ -104,6 +110,12 @@ export default function Header() {
               </SelectItem>
               <SelectItem value="zh" className="rounded-lg">
                 简体中文
+              </SelectItem>
+              <SelectItem value="zh-TW" className="rounded-lg">
+                繁體中文
+              </SelectItem>
+              <SelectItem value="ja" className="rounded-lg">
+                日本語
               </SelectItem>
             </SelectContent>
           </Select>

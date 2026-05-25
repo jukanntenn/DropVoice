@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { setMobileLanguage } from "../i18n";
+import { setMobileLanguage, type SupportedLanguage, SUPPORTED_LANGUAGES, detectLanguage } from "../i18n";
 
 export type Theme = "light" | "dark" | "system";
-export type Language = "en" | "zh";
+export type Language = SupportedLanguage;
 
 const THEME_KEY = "dropvoice-mobile-theme";
 const LANGUAGE_KEY = "dropvoice-mobile-lang";
@@ -10,14 +10,6 @@ const LANGUAGE_KEY = "dropvoice-mobile-lang";
 function getSystemTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-function detectLanguage(): Language {
-  const browserLang = navigator.language || (navigator as any).userLanguage;
-  if (typeof browserLang === "string" && browserLang.toLowerCase().startsWith("zh")) {
-    return "zh";
-  }
-  return "en";
 }
 
 function loadTheme(): Theme {
@@ -31,9 +23,9 @@ function loadTheme(): Theme {
 function loadLanguage(): Language {
   try {
     const saved = localStorage.getItem(LANGUAGE_KEY);
-    if (saved === "en" || saved === "zh") return saved;
+    if (saved && SUPPORTED_LANGUAGES.includes(saved as SupportedLanguage)) return saved as SupportedLanguage;
   } catch {}
-  return detectLanguage();
+  return detectLanguage(navigator.language || "");
 }
 
 function saveTheme(theme: Theme): void {

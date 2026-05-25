@@ -1,0 +1,80 @@
+{
+  "status": {
+    "connected": "已連線",
+    "disconnected": "未連線",
+    "connecting": "連線中...",
+    "reconnecting": "重新連線中...",
+    "connectionLost": "連線已斷開，請重新整理頁面重試"
+  },
+  "input": {
+    "placeholder": "輸入要傳送到電腦的文字...",
+    "restore": "恢復上一則訊息",
+    "charCount": "{{count}} / 10000",
+    "textTooLong": "文字過長（最多10000字元）"
+  },
+  "actions": {
+    "send": "傳送到電腦",
+    "sending": "傳送中..."
+  },
+  "notifications": {
+    "sent": "傳送成功！",
+    "lastMessageRestored": "已恢復上一則訊息",
+    "sendFailed": "傳送失敗"
+  },
+  "devices": {
+    "add": "新增",
+    "added": "已新增！",
+    "emptyState": "尚無裝置，點擊新增以連線",
+    "addDevice": "新增裝置",
+    "scanQR": "掃描 QR Code",
+    "inputUrl": "輸入網址",
+    "startScan": "開始掃描",
+    "stopScan": "停止掃描",
+    "done": "完成",
+    "scanHint": "點擊開始掃描，並掃描電腦端的 QR Code",
+    "hintTitle": "提示",
+    "scanHintHttps": "鏡頭需要 HTTPS 或 localhost 才能使用。如無法掃描，請使用手動輸入。",
+    "scanAddedCount": "已新增 {{count}} 台裝置",
+    "connectionAddress": "連線地址",
+    "deviceNameOptional": "裝置名稱（選填）",
+    "urlPlaceholder": "http://192.168.1.100:38425",
+    "willConnectTo": "將連線到: {{url}}",
+    "namePlaceholder": "預設: PC-xxx",
+    "renameDevice": "重新命名裝置",
+    "renameHint": "長按裝置可重新命名",
+    "cancel": "取消",
+    "save": "儲存",
+    "retry": "重試",
+    "selectDevice": "請先選擇裝置",
+    "deviceNotConnected": "裝置未連線",
+    "invalidUrl": "無效的連線地址",
+    "sendFailed": "傳送失敗，請檢查連線",
+    "sendTimeout": "傳送逾時，請重試",
+    "maxLimit": "最多支援 5 台裝置",
+    "alreadyExists": "此裝置已存在",
+    "removeConfirmTitle": "移除裝置",
+    "removeConfirm": "移除 {{name}}？",
+    "removeConfirmAction": "移除",
+    "errorUnreachable": "無法連線",
+    "errorRefused": "連線被拒",
+    "errorTimeout": "連線逾時",
+    "errorUnknown": "錯誤",
+    "switchedTo": "已切換到 {{name}}",
+    "cameraUnavailableTitle": "無法存取鏡頭",
+    "cameraRequiresHttpsAutoSwitch": "鏡頭需要 HTTPS 或 localhost 才能使用。已自動切換到手動輸入。",
+    "cameraPermissionDenied": "鏡頭權限被拒絕。請在瀏覽器設定中允許存取鏡頭。",
+    "cameraNotSupported": "您的瀏覽器不支援鏡頭功能",
+    "cameraNotFound": "未找到鏡頭裝置。",
+    "cameraInUse": "鏡頭被其他應用程式佔用。",
+    "startingCamera": "正在啟動鏡頭...",
+    "cameraInitFailed": "鏡頭初始化失敗: {{reason}}"
+  },
+  "settings": {
+    "title": "設定",
+    "language": "語言",
+    "theme": "主題",
+    "themeSystem": "跟隨系統",
+    "themeLight": "淺色",
+    "themeDark": "深色"
+  }
+}

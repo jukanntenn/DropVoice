@@ -193,16 +193,6 @@ export default function App() {
     setText("");
   }, [activeDeviceId, devices, isSending, sendToActive, showToast, t, text]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.ctrlKey && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
-      }
-    },
-    [handleSend],
-  );
-
   const handleRestore = useCallback(() => {
     if (!activeDeviceId) return;
     const last = loadLastSent(activeDeviceId);
@@ -302,7 +292,6 @@ export default function App() {
           <TextInput
             value={text}
             onChange={setText}
-            onKeyDown={handleKeyDown}
             disabled={
               devices.find((d) => d.id === activeDeviceId)?.status !== "connected"
             }

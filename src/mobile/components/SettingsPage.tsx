@@ -19,7 +19,9 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
   const languages: { value: Language; label: string }[] = [
     { value: "en", label: "English" },
-    { value: "zh", label: "中文" },
+    { value: "zh", label: "简体中文" },
+    { value: "zh-TW", label: "繁體中文" },
+    { value: "ja", label: "日本語" },
   ];
 
   const themes: { value: Theme; labelKey: "themeSystem" | "themeLight" | "themeDark" }[] =
