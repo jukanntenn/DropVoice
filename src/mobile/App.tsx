@@ -23,6 +23,7 @@ import {
   saveLastSent,
 } from "./utils/storage";
 import { initMobileI18n } from "./i18n";
+import { storageAvailable } from "./utils/createStorage";
 
 type Page = "main" | "settings";
 
@@ -40,6 +41,8 @@ export default function App() {
 
   const prevActiveDeviceIdRef = useRef<string | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const textRef = useRef(text);
+  textRef.current = text;
 
   const { t } = useTranslation();
   const { toasts, showToast, removeToast } = useToast();
@@ -102,6 +105,12 @@ export default function App() {
     initMobileI18n().then(() => setI18nReady(true));
   }, []);
 
+  useEffect(() => {
+    if (i18nReady && !storageAvailable()) {
+      showToast(t("notifications.storageUnavailable"), "error", 8000);
+    }
+  }, [i18nReady, showToast, t]);
+
   // Save current draft for old device, load draft for new device on switch
   useEffect(() => {
     const prevId = prevActiveDeviceIdRef.current;
@@ -133,6 +142,25 @@ export default function App() {
     }, 500);
     return () => window.clearTimeout(timer);
   }, [text, activeDeviceId]);
+
+  // Immediate draft save on page hide / unload
+  useEffect(() => {
+    if (!activeDeviceId) return;
+    const save = () => {
+      if (textRef.current && activeDeviceId) {
+        saveDraft(textRef.current, activeDeviceId);
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") save();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("beforeunload", save);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("beforeunload", save);
+    };
+  }, [activeDeviceId]);
 
   useEffect(() => {
     if (!lastError) return;

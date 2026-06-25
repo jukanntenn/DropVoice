@@ -3,13 +3,14 @@ import { useTranslation } from "react-i18next";
 import { QRScanner } from "./QRScanner";
 import { normalizeToWebSocketUrl } from "../utils/deviceStorage";
 import { checkCameraSupport } from "../utils/cameraSupport";
+import type { AddDeviceResult } from "../hooks/useMultiWebSocket";
 
 type Tab = "scan" | "input";
 
 interface AddDeviceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (url: string, name?: string) => boolean;
+  onAdd: (url: string, name?: string) => AddDeviceResult;
 }
 
 export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) {
@@ -69,8 +70,8 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
       setError(t("devices.invalidUrl"));
       return;
     }
-    const ok = onAdd(wsUrl, nameInput.trim() ? nameInput.trim() : undefined);
-    if (ok) close();
+    const result = onAdd(wsUrl, nameInput.trim() ? nameInput.trim() : undefined);
+    if (result) close();
   }, [close, nameInput, normalizedUrl, onAdd, t]);
 
   const onScan = useCallback(
@@ -80,8 +81,12 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
         setError(t("devices.invalidUrl"));
         return;
       }
-      const ok = onAdd(wsUrl);
-      if (ok) {
+      const result = onAdd(wsUrl);
+      if (result === "switched") {
+        close();
+        return;
+      }
+      if (result === "added") {
         setAddedCount((c) => c + 1);
         setLastAdded(wsUrl);
         setError(null);
@@ -93,7 +98,7 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
         }, 2000);
       }
     },
-    [onAdd, t],
+    [close, onAdd, t],
   );
 
   if (!isOpen) return null;

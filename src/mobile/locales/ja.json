@@ -19,7 +19,8 @@
   "notifications": {
     "sent": "送信成功！",
     "lastMessageRestored": "最後のメッセージを復元しました",
-    "sendFailed": "送信に失敗しました"
+    "sendFailed": "送信に失敗しました",
+    "storageUnavailable": "ストレージが利用できません — このセッションでは下書きは保存されません"
   },
   "devices": {
     "add": "追加",

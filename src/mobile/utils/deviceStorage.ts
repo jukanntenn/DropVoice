@@ -1,4 +1,5 @@
 import type { Device, DeviceStorage, StoredDevice } from "../types";
+import { storageGet, storageSet } from "./createStorage";
 
 const STORAGE_KEY = "dropvoice:devices:v1";
 
@@ -6,7 +7,7 @@ export const MAX_DEVICES = 5;
 
 export function loadDeviceStorage(): DeviceStorage {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = storageGet(STORAGE_KEY);
     if (!raw) return { devices: [], lastActiveDeviceId: null };
     const parsed = JSON.parse(raw) as DeviceStorage;
     if (!parsed || !Array.isArray(parsed.devices)) {
@@ -24,10 +25,8 @@ export function loadDeviceStorage(): DeviceStorage {
   }
 }
 
-export function saveDeviceStorage(storage: DeviceStorage): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
-  } catch {}
+export function saveDeviceStorage(data: DeviceStorage): void {
+  storageSet(STORAGE_KEY, JSON.stringify(data));
 }
 
 export function storedToDevice(stored: StoredDevice): Device {

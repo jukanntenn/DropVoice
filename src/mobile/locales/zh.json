@@ -19,7 +19,8 @@
   "notifications": {
     "sent": "发送成功！",
     "lastMessageRestored": "已恢复上一条消息",
-    "sendFailed": "发送失败"
+    "sendFailed": "发送失败",
+    "storageUnavailable": "存储不可用——草稿在本次会话中无法保存"
   },
   "devices": {
     "add": "添加",

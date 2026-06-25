@@ -4,6 +4,7 @@ import enTranslation from "./locales/en.json";
 import zhTranslation from "./locales/zh.json";
 import zhTWTranslation from "./locales/zh-TW.json";
 import jaTranslation from "./locales/ja.json";
+import { storageGet, storageSet } from "./utils/createStorage";
 
 export const SUPPORTED_LANGUAGES = ["en", "zh", "zh-TW", "ja"] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
@@ -23,7 +24,7 @@ export function detectLanguage(locale: string): SupportedLanguage {
 }
 
 function getInitialLanguage(): SupportedLanguage {
-  const saved = localStorage.getItem("dropvoice-mobile-lang");
+  const saved = storageGet("dropvoice-mobile-lang");
   if (saved && SUPPORTED_LANGUAGES.includes(saved as SupportedLanguage)) {
     return saved as SupportedLanguage;
   }
@@ -52,7 +53,7 @@ export async function initMobileI18n() {
 }
 
 export function setMobileLanguage(lang: SupportedLanguage) {
-  localStorage.setItem("dropvoice-mobile-lang", lang);
+  storageSet("dropvoice-mobile-lang", lang);
   i18n.changeLanguage(lang);
 }
 

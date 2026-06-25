@@ -19,7 +19,8 @@
   "notifications": {
     "sent": "Text sent successfully!",
     "lastMessageRestored": "Last message restored",
-    "sendFailed": "Failed to send text"
+    "sendFailed": "Failed to send text",
+    "storageUnavailable": "Storage unavailable — drafts won't persist this session"
   },
   "devices": {
     "add": "Add",

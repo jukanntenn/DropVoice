@@ -15,13 +15,15 @@ type ConnectionEntry = {
   openTimestamp: number;
 };
 
+export type AddDeviceResult = "added" | "switched" | false;
+
 interface UseMultiWebSocketReturn {
   devices: Device[];
   activeDeviceId: string | null;
   isSending: boolean;
   lastError: string | null;
   clearError: () => void;
-  addDevice: (url: string, name?: string) => boolean;
+  addDevice: (url: string, name?: string) => AddDeviceResult;
   removeDevice: (deviceId: string) => void;
   renameDevice: (deviceId: string, newName: string) => void;
   setActiveDevice: (deviceId: string) => void;
@@ -232,15 +234,22 @@ export function useMultiWebSocket(
   }, [clearSendTimer]);
 
   const addDevice = useCallback(
-    (url: string, name?: string) => {
+    (url: string, name?: string): AddDeviceResult => {
       if (devicesRef.current.length >= MAX_DEVICES) {
         setLastError("devices.maxLimit");
         return false;
       }
 
-      if (devicesRef.current.some((d) => d.url === url)) {
-        setLastError("devices.alreadyExists");
-        return false;
+      const existing = devicesRef.current.find((d) => d.url === url);
+      if (existing) {
+        updateDevice(existing.id, {
+          lastConnected: Date.now(),
+          hasExhaustedRetries: false,
+          errorType: undefined,
+        });
+        setActiveDeviceId(existing.id);
+        connect(existing, 0);
+        return "switched";
       }
 
       const device: Device = {
@@ -253,9 +262,9 @@ export function useMultiWebSocket(
 
       setDevices([...devicesRef.current, device]);
       setActiveDeviceId(device.id);
-      return true;
+      return "added";
     },
-    [setActiveDeviceId, setDevices],
+    [connect, setActiveDeviceId, setDevices, updateDevice],
   );
 
   const removeDevice = useCallback(

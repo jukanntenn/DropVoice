@@ -1,3 +1,5 @@
+import { storageGet, storageSet, storageRemove } from "./createStorage";
+
 const host = window.location.host;
 
 function draftKey(deviceId: string): string {
@@ -9,49 +11,29 @@ function lastSentKey(deviceId: string): string {
 }
 
 export function saveDraft(text: string, deviceId: string): void {
-  try {
-    localStorage.setItem(draftKey(deviceId), text);
-  } catch {}
+  storageSet(draftKey(deviceId), text);
 }
 
 export function loadDraft(deviceId: string): string | null {
-  try {
-    return localStorage.getItem(draftKey(deviceId));
-  } catch {
-    return null;
-  }
+  return storageGet(draftKey(deviceId));
 }
 
 export function clearDraft(deviceId: string): void {
-  try {
-    localStorage.removeItem(draftKey(deviceId));
-  } catch {}
+  storageRemove(draftKey(deviceId));
 }
 
 export function saveLastSent(text: string, deviceId: string): void {
-  try {
-    localStorage.setItem(lastSentKey(deviceId), text);
-  } catch {}
+  storageSet(lastSentKey(deviceId), text);
 }
 
 export function loadLastSent(deviceId: string): string | null {
-  try {
-    return localStorage.getItem(lastSentKey(deviceId));
-  } catch {
-    return null;
-  }
+  return storageGet(lastSentKey(deviceId));
 }
 
 export function clearLastSent(deviceId: string): void {
-  try {
-    localStorage.removeItem(lastSentKey(deviceId));
-  } catch {}
+  storageRemove(lastSentKey(deviceId));
 }
 
 export function hasLastSent(deviceId: string): boolean {
-  try {
-    return localStorage.getItem(lastSentKey(deviceId)) !== null;
-  } catch {
-    return false;
-  }
+  return storageGet(lastSentKey(deviceId)) !== null;
 }
