@@ -266,13 +266,15 @@ export default function App() {
       </div>
 
       <div className="relative mx-auto max-w-md">
-        <div className="flex min-h-[2.25rem] items-center justify-between">
+        <div className="flex min-h-[2.25rem] items-center">
           <ConnectionPill device={activeDevice} onRetry={() => activeDevice && retryDevice(activeDevice.id)} />
-          <DeviceMenu
-            canRemove={!!activeDeviceId}
-            onAdd={() => setShowAddDevice(true)}
-            onRemove={() => activeDeviceId && setRemoveDeviceId(activeDeviceId)}
-          />
+          <div className="ml-auto">
+            <DeviceMenu
+              canRemove={!!activeDeviceId}
+              onAdd={() => setShowAddDevice(true)}
+              onRemove={() => activeDeviceId && setRemoveDeviceId(activeDeviceId)}
+            />
+          </div>
         </div>
 
         {/* Main glass card */}
