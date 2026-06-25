@@ -10,7 +10,7 @@ type Tab = "scan" | "input";
 interface AddDeviceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (url: string, name?: string) => AddDeviceResult;
+  onAdd: (url: string) => AddDeviceResult;
 }
 
 export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) {
@@ -18,7 +18,6 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
   const [tab, setTab] = useState<Tab>("scan");
   const [isScanning, setIsScanning] = useState(false);
   const [urlInput, setUrlInput] = useState("");
-  const [nameInput, setNameInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [addedCount, setAddedCount] = useState(0);
   const [lastAdded, setLastAdded] = useState<string | null>(null);
@@ -49,7 +48,6 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
     }
     setIsScanning(false);
     setUrlInput("");
-    setNameInput("");
     setError(null);
     setTab("scan");
     setAddedCount(0);
@@ -70,9 +68,9 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
       setError(t("devices.invalidUrl"));
       return;
     }
-    const result = onAdd(wsUrl, nameInput.trim() ? nameInput.trim() : undefined);
+    const result = onAdd(wsUrl);
     if (result) close();
-  }, [close, nameInput, normalizedUrl, onAdd, t]);
+  }, [close, normalizedUrl, onAdd, t]);
 
   const onScan = useCallback(
     (text: string) => {
@@ -293,18 +291,6 @@ export function AddDeviceModal({ isOpen, onClose, onAdd }: AddDeviceModalProps) 
                     {t("devices.willConnectTo", { url: normalizedUrl })}
                   </div>
                 ) : null}
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  {t("devices.deviceNameOptional")}
-                </label>
-                <input
-                  type="text"
-                  value={nameInput}
-                  onChange={(e) => setNameInput(e.target.value)}
-                  placeholder={t("devices.namePlaceholder")}
-                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-primary/50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                />
               </div>
               <button
                 type="button"

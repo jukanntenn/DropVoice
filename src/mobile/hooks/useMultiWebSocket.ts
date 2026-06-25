@@ -23,9 +23,8 @@ interface UseMultiWebSocketReturn {
   isSending: boolean;
   lastError: string | null;
   clearError: () => void;
-  addDevice: (url: string, name?: string) => AddDeviceResult;
+  addDevice: (url: string) => AddDeviceResult;
   removeDevice: (deviceId: string) => void;
-  renameDevice: (deviceId: string, newName: string) => void;
   setActiveDevice: (deviceId: string) => void;
   retryDevice: (deviceId: string) => void;
   sendToActive: (text: string) => boolean;
@@ -234,7 +233,7 @@ export function useMultiWebSocket(
   }, [clearSendTimer]);
 
   const addDevice = useCallback(
-    (url: string, name?: string): AddDeviceResult => {
+    (url: string): AddDeviceResult => {
       if (devicesRef.current.length >= MAX_DEVICES) {
         setLastError("devices.maxLimit");
         return false;
@@ -254,7 +253,7 @@ export function useMultiWebSocket(
 
       const device: Device = {
         id: generateDeviceId(),
-        name: name?.trim() ? name.trim() : getDefaultDeviceName(url),
+        name: getDefaultDeviceName(url),
         url,
         status: "connecting",
         lastConnected: 0,
@@ -288,17 +287,6 @@ export function useMultiWebSocket(
       }
     },
     [setActiveDeviceId, setDevices],
-  );
-
-  const renameDevice = useCallback(
-    (deviceId: string, newName: string) => {
-      const trimmed = newName.trim();
-      if (!trimmed) return;
-      setDevices(
-        devicesRef.current.map((d) => (d.id === deviceId ? { ...d, name: trimmed } : d)),
-      );
-    },
-    [setDevices],
   );
 
   const setActiveDevice = useCallback(
@@ -356,7 +344,6 @@ export function useMultiWebSocket(
       clearError,
       addDevice,
       removeDevice,
-      renameDevice,
       setActiveDevice,
       retryDevice,
       sendToActive,
@@ -369,7 +356,6 @@ export function useMultiWebSocket(
       isSending,
       lastError,
       removeDevice,
-      renameDevice,
       sendToActive,
       setActiveDevice,
       retryDevice,

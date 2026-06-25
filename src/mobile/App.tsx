@@ -1,10 +1,10 @@
-import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AddDeviceModal } from "./components/AddDeviceModal";
 import { ConfirmDialog } from "./components/ConfirmDialog";
-import { DeviceNameEditor } from "./components/DeviceNameEditor";
-import { DeviceTabs } from "./components/DeviceTabs";
+import { ConnectionPill } from "./components/ConnectionPill";
+import { DeviceDots } from "./components/DeviceDots";
+import { DeviceMenu } from "./components/DeviceMenu";
 import { TextInput } from "./components/TextInput";
 import { SendButton } from "./components/SendButton";
 import { RestoreButton } from "./components/RestoreButton";
@@ -24,23 +24,21 @@ import {
 } from "./utils/storage";
 import { initMobileI18n } from "./i18n";
 import { storageAvailable } from "./utils/createStorage";
+import { getDeviceHostLabel } from "./utils/deviceColor";
 
 type Page = "main" | "settings";
 
 export default function App() {
   const [page, setPage] = useState<Page>("main");
-  useSettings();
+  const { resolvedTheme } = useSettings();
 
   const [i18nReady, setI18nReady] = useState(false);
   const [text, setText] = useState("");
 
   const [showAddDevice, setShowAddDevice] = useState(false);
-  const [renameDeviceId, setRenameDeviceId] = useState<string | null>(null);
-  const [showRename, setShowRename] = useState(false);
   const [removeDeviceId, setRemoveDeviceId] = useState<string | null>(null);
 
   const prevActiveDeviceIdRef = useRef<string | null>(null);
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const textRef = useRef(text);
   textRef.current = text;
 
@@ -62,7 +60,6 @@ export default function App() {
     clearError,
     addDevice,
     removeDevice,
-    renameDevice,
     setActiveDevice,
     retryDevice,
     sendToActive,
@@ -71,34 +68,6 @@ export default function App() {
     setDevices,
     managedActiveDeviceId,
     setActiveDeviceId,
-  );
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-  }, []);
-
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      if (!touchStartRef.current) return;
-      const touch = e.changedTouches[0];
-      const dx = touch.clientX - touchStartRef.current.x;
-      const dy = touch.clientY - touchStartRef.current.y;
-      touchStartRef.current = null;
-
-      if (Math.abs(dx) < 80 || Math.abs(dy) > Math.abs(dx) * 0.5) return;
-
-      const sorted = [...devices].sort((a, b) => b.lastConnected - a.lastConnected);
-      const currentIdx = sorted.findIndex((d) => d.id === activeDeviceId);
-      if (currentIdx < 0) return;
-
-      if (dx < 0 && currentIdx < sorted.length - 1) {
-        setActiveDevice(sorted[currentIdx + 1].id);
-      } else if (dx > 0 && currentIdx > 0) {
-        setActiveDevice(sorted[currentIdx - 1].id);
-      }
-    },
-    [activeDeviceId, devices, setActiveDevice],
   );
 
   useEffect(() => {
@@ -120,7 +89,11 @@ export default function App() {
       saveDraft(text, prevId);
       const switchedDevice = devices.find((d) => d.id === newId);
       if (switchedDevice) {
-        showToast(t("devices.switchedTo", { name: switchedDevice.name }), "success", 1500);
+        showToast(
+          t("devices.switchedTo", { ip: getDeviceHostLabel(switchedDevice) }),
+          "success",
+          1500,
+        );
       }
     }
 
@@ -133,6 +106,12 @@ export default function App() {
 
     prevActiveDeviceIdRef.current = newId;
   }, [activeDeviceId]);
+
+  // Reflect the active device's host in the browser tab title.
+  useEffect(() => {
+    const active = devices.find((d) => d.id === activeDeviceId);
+    document.title = active ? getDeviceHostLabel(active) : "DropVoice";
+  }, [activeDeviceId, devices]);
 
   // Debounced draft save for active device
   useEffect(() => {
@@ -191,6 +170,12 @@ export default function App() {
     return text.trim().length > 0;
   }, [text]);
 
+  const activeDevice = useMemo(
+    () => devices.find((d) => d.id === activeDeviceId) ?? null,
+    [activeDeviceId, devices],
+  );
+  const dark = resolvedTheme === "dark";
+
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -243,41 +228,17 @@ export default function App() {
   }, []);
 
   const handleAddDevice = useCallback(
-    (url: string, name?: string) => {
-      return addDevice(url, name);
+    (url: string) => {
+      return addDevice(url);
     },
     [addDevice],
-  );
-
-  const handleRemoveDevice = useCallback(
-    (deviceId: string) => {
-      setRemoveDeviceId(deviceId);
-    },
-    [],
   );
 
   const handleConfirmRemove = useCallback(() => {
     if (!removeDeviceId) return;
     removeDevice(removeDeviceId);
-    if (renameDeviceId === removeDeviceId) {
-      setRenameDeviceId(null);
-      setShowRename(false);
-    }
     setRemoveDeviceId(null);
-  }, [removeDevice, removeDeviceId, renameDeviceId]);
-
-  const handleRenameDevice = useCallback((deviceId: string) => {
-    setRenameDeviceId(deviceId);
-    setShowRename(true);
-  }, []);
-
-  const handleSaveRename = useCallback(
-    (newName: string) => {
-      if (!renameDeviceId) return;
-      renameDevice(renameDeviceId, newName);
-    },
-    [renameDevice, renameDeviceId],
-  );
+  }, [removeDevice, removeDeviceId]);
 
   if (page === "settings") {
     return <SettingsPage onBack={handleBackFromSettings} />;
@@ -305,15 +266,14 @@ export default function App() {
       </div>
 
       <div className="relative mx-auto max-w-md">
-        <DeviceTabs
-          devices={devices}
-          activeDeviceId={activeDeviceId}
-          onSelect={setActiveDevice}
-          onRemove={handleRemoveDevice}
-          onRename={handleRenameDevice}
-          onRetry={retryDevice}
-          onAdd={() => setShowAddDevice(true)}
-        />
+        <div className="flex min-h-[2.25rem] items-center justify-between">
+          <ConnectionPill device={activeDevice} onRetry={() => activeDevice && retryDevice(activeDevice.id)} />
+          <DeviceMenu
+            canRemove={!!activeDeviceId}
+            onAdd={() => setShowAddDevice(true)}
+            onRemove={() => activeDeviceId && setRemoveDeviceId(activeDeviceId)}
+          />
+        </div>
 
         {/* Main glass card */}
         <div className="animate-slide-up mt-3 rounded-3xl p-0">
@@ -326,11 +286,20 @@ export default function App() {
             onOpenSettings={handleOpenSettings}
           />
 
-          <div
-            className="mt-6 flex items-center justify-between px-1"
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-          >
+          {devices.length === 0 ? (
+            <p className="mt-3 text-center text-sm text-muted-foreground dark:text-slate-400">
+              {t("devices.emptyState")}
+            </p>
+          ) : (
+            <DeviceDots
+              devices={devices}
+              activeDeviceId={activeDeviceId}
+              dark={dark}
+              onSelect={setActiveDevice}
+            />
+          )}
+
+          <div className="mt-6 flex items-center justify-between px-1">
             <RestoreButton onClick={handleRestore} disabled={!canRestore} />
             <SendButton
               onClick={handleSend}
@@ -358,21 +327,13 @@ export default function App() {
         onAdd={handleAddDevice}
       />
 
-      <DeviceNameEditor
-        isOpen={showRename}
-        currentName={devices.find((d) => d.id === renameDeviceId)?.name ?? ""}
-        onSave={handleSaveRename}
-        onClose={() => {
-          setShowRename(false);
-          setRenameDeviceId(null);
-        }}
-      />
-
       <ConfirmDialog
         isOpen={removeDeviceId !== null}
         title={t("devices.removeConfirmTitle")}
         message={t("devices.removeConfirm", {
-          name: devices.find((d) => d.id === removeDeviceId)?.name ?? "",
+          ip: getDeviceHostLabel(
+            devices.find((d) => d.id === removeDeviceId) ?? { id: "", name: "", url: "", status: "disconnected", lastConnected: 0 },
+          ),
         })}
         onConfirm={handleConfirmRemove}
         onCancel={() => setRemoveDeviceId(null)}
