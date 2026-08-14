@@ -1,0 +1,152 @@
+name: Quality Checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'specs/**'
+      - 'LICENSE'
+      - '.gitignore'
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'specs/**'
+      - 'LICENSE'
+      - '.gitignore'
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      desktop: ${{ steps.filter.outputs.desktop }}
+      pairing: ${{ steps.filter.outputs.pairing }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@de90cc6fb66fc756703f280f72eb1f71e65ce00f
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'apps/desktop/src/**'
+              - 'apps/mobile/**'
+              - 'packages/**'
+              - 'e2e/**'
+              - '*.json'
+              - '*.ts'
+              - '.oxlintrc.json'
+              - '.prettierrc'
+              - 'tsconfig.base.json'
+            desktop:
+              - 'apps/desktop/src-tauri/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rustfmt.toml'
+            pairing:
+              - 'apps/pairing-server/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rustfmt.toml'
+
+  frontend:
+    name: Frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: TypeScript
+        run: pnpm typecheck
+      - name: Lint
+        run: pnpm lint
+      - name: Format
+        run: pnpm format:check
+      - name: Test
+        run: pnpm test:coverage
+      - name: DESIGN.md
+        run: pnpm design:lint
+
+  design-sync:
+    name: Design Sync
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Export DESIGN.md tokens
+        run: pnpm design:export:css
+      - name: Check sync
+        run: |
+          if [ -n "$(git diff packages/ui/src/tokens/theme.css)" ]; then
+            echo "::error::DESIGN.md tokens out of sync. Run: pnpm design:sync"
+            exit 1
+          fi
+          echo "Design tokens in sync"
+
+  backend:
+    name: Rust (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - name: Format
+        run: cargo fmt --check --manifest-path apps/desktop/src-tauri/Cargo.toml
+      - name: Clippy
+        run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings
+      - name: Test
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+  pairing-server:
+    name: Pairing Server
+    needs: changes
+    if: needs.changes.outputs.pairing == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/pairing-server
+      - name: Format
+        run: cargo fmt --check --manifest-path apps/pairing-server/Cargo.toml
+      - name: Clippy
+        run: cargo clippy --manifest-path apps/pairing-server/Cargo.toml -- -D warnings
+      - name: Unit + Integration tests
+        run: cargo test --manifest-path apps/pairing-server/Cargo.toml

@@ -1,0 +1,62 @@
+{
+  "app": {
+    "name": "DropVoice",
+    "description": "从手机向桌面发送文本",
+    "loading": "加载中...",
+    "error": "发生错误",
+    "version": "版本 {{version}}"
+  },
+  "actions": {
+    "send": "发送",
+    "cancel": "取消",
+    "confirm": "确认",
+    "copy": "复制",
+    "paste": "粘贴",
+    "delete": "删除",
+    "remove": "移除",
+    "retry": "重试",
+    "close": "关闭",
+    "restore": "恢复",
+    "settings": "设置",
+    "add": "添加",
+    "clear": "清空"
+  },
+  "status": {
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "connecting": "连接中...",
+    "sending": "发送中...",
+    "reconnecting": "重连中...",
+    "error": "错误"
+  },
+  "lan": {
+    "warningTitle": "仅限局域网使用",
+    "warningText": "请在可信的本地网络中使用，流量未加密。",
+    "warningDismiss": "我知道了"
+  },
+  "connection": {
+    "title": "连接",
+    "url": "连接地址",
+    "connectedDevices": "已连接设备",
+    "noDevices": "暂无设备连接",
+    "activeConnections": "{{count}} 个活跃",
+    "activeConnections_one": "{{count}} 个活跃",
+    "activeConnections_other": "{{count}} 个活跃",
+    "scanQR": "用手机扫描二维码",
+    "copyLink": "或复制配对链接",
+    "reconnectCode": "重连码",
+    "reconnectCodeHint": "手机重连索取时使用",
+    "ready": "可以听写",
+    "addDevice": "添加另一台设备"
+  },
+  "queue": {
+    "title": "注入队列",
+    "depth": "队列深度",
+    "pending": "{{count}} 个等待",
+    "pending_one": "{{count}} 个等待",
+    "pending_other": "{{count}} 个等待",
+    "processing": "处理中...",
+    "empty": "队列为空",
+    "typing": "输入中… {{count}} 排队"
+  }
+}

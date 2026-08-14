@@ -1,0 +1,32 @@
+# Codex CLI configuration.
+# Docs: https://learn.chatgpt.com/docs/config-file/config-reference
+
+[features]
+hooks = true
+
+# --- PreToolUse: protect generated files ---
+[[hooks.PreToolUse]]
+matcher = "Edit|Write|ApplyPatch"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "python3 .codex/hooks/protect_generated_files.py"
+command_windows = "python .codex/hooks/protect_generated_files.py"
+
+# --- PostToolUse: auto-format after edits ---
+[[hooks.PostToolUse]]
+matcher = "Edit|Write|ApplyPatch"
+
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = "python3 .codex/hooks/format_on_edit.py"
+command_windows = "python .codex/hooks/format_on_edit.py"
+
+# --- Stop: lint before ending ---
+[[hooks.Stop]]
+
+[[hooks.Stop.hooks]]
+type = "command"
+command = "python3 .codex/hooks/lint_on_stop.py"
+command_windows = "python .codex/hooks/lint_on_stop.py"
+timeout = 240

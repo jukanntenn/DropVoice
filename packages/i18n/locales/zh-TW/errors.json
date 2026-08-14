@@ -1,0 +1,32 @@
+{
+  "serverAlreadyRunning": "伺服器已在執行",
+  "serverStartFailed": "伺服器啟動失敗：{{reason}}",
+  "portInUse": "連接埠 {{port}} 已被佔用",
+  "portBindFailed": "綁定連接埠 {{port}} 失敗：{{reason}}",
+  "networkUnreachable": "網路不可達：{{reason}}",
+  "connectionRefused": "連線被拒絕",
+  "connectionTimeout": "連線逾時",
+  "connectionLost": "連線中斷",
+  "textInjectionFailed": "文字注入失敗：{{reason}}",
+  "injectionFailed": "桌面文字注入失敗",
+  "textTooLong": "文字過長（{{length}}/{{max}} 字元）",
+  "textEmpty": "文字為空",
+  "invalidLanguage": "無效語言：{{lang}}",
+  "invalidTheme": "無效主題：{{theme}}",
+  "settingsSaveFailed": "設定儲存失敗：{{reason}}",
+  "deviceNotFound": "裝置未找到",
+  "deviceAlreadyConnected": "裝置已連線",
+  "maxDevicesReached": "已達最大裝置數（{{max}}）",
+  "messageTooLarge": "訊息過大（{{length}}/{{max}} 位元組）",
+  "messageInvalid": "無效訊息：{{reason}}",
+  "queueFull": "注入佇列已滿（{{depth}}/{{max}}）",
+  "ioError": "IO 錯誤：{{path}}",
+  "internalError": "內部錯誤",
+  "suggestion": {
+    "checkNetwork": "請檢查您的網路連線",
+    "checkServerRunning": "請確認伺服器正在執行",
+    "retryLater": "請稍後重試",
+    "changePort": "請嘗試使用其他連接埠",
+    "removeDevice": "新增裝置前請先移除一個裝置"
+  }
+}

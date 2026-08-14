@@ -1,0 +1,20 @@
+{
+  "title": "設定",
+  "language": "語言",
+  "theme": "主題",
+  "themeLight": "淺色",
+  "themeDark": "深色",
+  "themeSystem": "跟隨系統",
+  "inputDelay": "輸入延遲（毫秒）",
+  "minimizeToTray": "最小化到系統匣",
+  "maxTextLength": "最大文本長度",
+  "autoStart": "開機自動啟動",
+  "checkUpdate": "檢查更新",
+  "about": "關於",
+  "languages": {
+    "en": "English",
+    "zh": "简体中文",
+    "zh-TW": "繁體中文",
+    "ja": "日本語"
+  }
+}

@@ -1,0 +1,10 @@
+# Ansible Vault — production secrets for dropvoice pairing-server.
+#
+# Currently no application secrets needed (SQLite has no password, no JWT, no API keys).
+# This file is referenced by production.yml via vars_files; it must exist even if empty.
+# To encrypt it once real secrets are added:
+#   ansible-vault encrypt devops/ansible/vars/production/vault.yml \
+#       --vault-password-file ~/.ansible-vault/dropvoice-production.pwd
+#
+# Placeholder for future secrets:
+# some_secret: changeme

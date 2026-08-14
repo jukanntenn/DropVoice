@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "enabled": true,
+    "events": {
+      "PreToolUse": [
+        {
+          "matcher": "Edit|Write|ApplyPatch",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "python \"${ZCODE_PROJECT_DIR}/.zcode/hooks/protect_generated_files.py\""
+            }
+          ]
+        }
+      ],
+      "PostToolUse": [
+        {
+          "matcher": "Edit|Write|ApplyPatch",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "python \"${ZCODE_PROJECT_DIR}/.zcode/hooks/format_on_edit.py\""
+            }
+          ]
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "python \"${ZCODE_PROJECT_DIR}/.zcode/hooks/lint_on_stop.py\"",
+              "timeout": 240
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

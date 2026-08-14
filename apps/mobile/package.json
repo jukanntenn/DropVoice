@@ -1,0 +1,49 @@
+{
+  "name": "@dropvoice/mobile",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint src/",
+    "lint:fix": "oxlint src/ --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,json,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css}\""
+  },
+  "dependencies": {
+    "@dropvoice/core": "workspace:*",
+    "@dropvoice/i18n": "workspace:*",
+    "@dropvoice/ui": "workspace:*",
+    "framer-motion": "^12.0.0",
+    "html5-qrcode": "^2.3.8",
+    "i18next": "^25.8.0",
+    "jotai": "^2.18.0",
+    "lucide-react": "^0.511.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-i18next": "^16.5.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.0",
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "jsdom": "^25.0.0",
+    "oxlint": "^0.15.0",
+    "prettier": "^3.6.0",
+    "prettier-plugin-tailwindcss": "^0.6.0",
+    "tailwindcss": "^4.2.0",
+    "typescript": "^5.9.0",
+    "vite": "^6.4.0",
+    "vitest": "^4.1.0"
+  }
+}

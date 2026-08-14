@@ -1,0 +1,32 @@
+{
+  "serverAlreadyRunning": "服务器已在运行",
+  "serverStartFailed": "服务器启动失败：{{reason}}",
+  "portInUse": "端口 {{port}} 已被占用",
+  "portBindFailed": "绑定端口 {{port}} 失败：{{reason}}",
+  "networkUnreachable": "网络不可达：{{reason}}",
+  "connectionRefused": "连接被拒绝",
+  "connectionTimeout": "连接超时",
+  "connectionLost": "连接断开",
+  "textInjectionFailed": "文本注入失败：{{reason}}",
+  "injectionFailed": "桌面文本注入失败",
+  "textTooLong": "文本过长（{{length}}/{{max}} 字符）",
+  "textEmpty": "文本为空",
+  "invalidLanguage": "无效语言：{{lang}}",
+  "invalidTheme": "无效主题：{{theme}}",
+  "settingsSaveFailed": "设置保存失败：{{reason}}",
+  "deviceNotFound": "设备未找到",
+  "deviceAlreadyConnected": "设备已连接",
+  "maxDevicesReached": "已达最大设备数（{{max}}）",
+  "messageTooLarge": "消息过大（{{length}}/{{max}} 字节）",
+  "messageInvalid": "无效消息：{{reason}}",
+  "queueFull": "注入队列已满（{{depth}}/{{max}}）",
+  "ioError": "IO 错误：{{path}}",
+  "internalError": "内部错误",
+  "suggestion": {
+    "checkNetwork": "请检查您的网络连接",
+    "checkServerRunning": "请确认服务器正在运行",
+    "retryLater": "请稍后重试",
+    "changePort": "请尝试使用其他端口",
+    "removeDevice": "添加新设备前请先移除一个设备"
+  }
+}

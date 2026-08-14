@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DropVoice",
+  "version": "0.2.0",
+  "identifier": "app.dropvoice.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm --filter @dropvoice/desktop dev",
+    "beforeBuildCommand": "node src-tauri/scripts/inject-csp.mjs && pnpm --filter @dropvoice/desktop build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "DropVoice",
+        "width": 800,
+        "height": 650,
+        "resizable": true,
+        "center": true,
+        "minWidth": 600,
+        "minHeight": 500,
+        "label": "main",
+        "visible": true,
+        "backgroundThrottling": "disabled"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' __CSP_CONNECT_SRC__; img-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": { "minimumSystemVersion": "10.15" },
+    "linux": { "deb": { "depends": ["libwebkit2gtk-4.1-0", "libxdo-dev"] } }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://releases.dropvoice.app/update/manifest.json"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFFMjNEOEU4RkM0Q0MxQ0MKUldUTXdVejg2TmdqSG1ZalRKU3AwaXh5UUJiN3BNYjJwTjE0Mm9BcTFtcU1iVllKcDUwdU9KcEEK"
+    }
+  }
+}

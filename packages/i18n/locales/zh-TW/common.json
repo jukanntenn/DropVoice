@@ -1,0 +1,62 @@
+{
+  "app": {
+    "name": "DropVoice",
+    "description": "從手機向桌面傳送文字",
+    "loading": "載入中...",
+    "error": "發生錯誤",
+    "version": "版本 {{version}}"
+  },
+  "actions": {
+    "send": "傳送",
+    "cancel": "取消",
+    "confirm": "確認",
+    "copy": "複製",
+    "paste": "貼上",
+    "delete": "刪除",
+    "remove": "移除",
+    "retry": "重試",
+    "close": "關閉",
+    "restore": "還原",
+    "settings": "設定",
+    "add": "新增",
+    "clear": "清除"
+  },
+  "status": {
+    "connected": "已連線",
+    "disconnected": "未連線",
+    "connecting": "連線中...",
+    "sending": "傳送中...",
+    "reconnecting": "重新連線中...",
+    "error": "錯誤"
+  },
+  "lan": {
+    "warningTitle": "僅限區域網路使用",
+    "warningText": "請在可信的本地網路中使用，流量未加密。",
+    "warningDismiss": "我知道了"
+  },
+  "connection": {
+    "title": "連線",
+    "url": "連線位址",
+    "connectedDevices": "已連線裝置",
+    "noDevices": "暫無裝置連線",
+    "activeConnections": "{{count}} 個活躍",
+    "activeConnections_one": "{{count}} 個活躍",
+    "activeConnections_other": "{{count}} 個活躍",
+    "scanQR": "用手機掃描 QR 碼",
+    "copyLink": "或複製配對連結",
+    "reconnectCode": "重連碼",
+    "reconnectCodeHint": "手機重連索取時使用",
+    "ready": "可以聽寫",
+    "addDevice": "新增另一台裝置"
+  },
+  "queue": {
+    "title": "注入佇列",
+    "depth": "佇列深度",
+    "pending": "{{count}} 個等待",
+    "pending_one": "{{count}} 個等待",
+    "pending_other": "{{count}} 個等待",
+    "processing": "處理中...",
+    "empty": "佇列為空",
+    "typing": "輸入中… {{count}} 排隊"
+  }
+}

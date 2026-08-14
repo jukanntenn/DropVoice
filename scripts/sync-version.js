@@ -1,31 +1,29 @@
-#!/usr/bin/env node
-import { readFileSync, writeFileSync } from "fs";
-import { dirname, resolve } from "path";
-import { fileURLToPath } from "url";
+// Synchronizes the root package.json version to apps/desktop/src-tauri/Cargo.toml.
+// Run via `pnpm version:sync` after `pnpm version patch|minor|major`.
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const rootDir = resolve(__dirname, "..");
+const fs = require('node:fs');
+const path = require('node:path');
 
-const packageJsonPath = resolve(rootDir, "package.json");
-const cargoTomlPath = resolve(rootDir, "src-tauri", "Cargo.toml");
+const root = path.resolve(__dirname, '..');
+const packageJsonPath = path.join(root, 'package.json');
+const cargoPath = path.join(root, 'apps/desktop/src-tauri/Cargo.toml');
 
-const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
-const version = packageJson?.version;
+const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+const version = packageJson.version;
 
-if (typeof version !== "string" || version.length === 0) {
-  throw new Error("package.json version is missing or invalid");
+if (!version) {
+  console.error('No version found in package.json');
+  process.exit(1);
 }
 
-const cargoToml = readFileSync(cargoTomlPath, "utf-8");
-const updatedCargoToml = cargoToml.replace(
-  /^version\s*=\s*"[^"]*"/m,
-  `version = "${version}"`
-);
-
-if (updatedCargoToml === cargoToml) {
-  console.log(`Cargo.toml already matches version ${version}`);
-  process.exit(0);
+let cargoContent = fs.readFileSync(cargoPath, 'utf8');
+const versionPattern = /^version = ".*"$/m;
+if (!versionPattern.test(cargoContent)) {
+  console.error('Could not find version field in Cargo.toml');
+  process.exit(1);
 }
 
-writeFileSync(cargoTomlPath, updatedCargoToml);
-console.log(`Synced version ${version} to Cargo.toml`);
+cargoContent = cargoContent.replace(versionPattern, `version = "${version}"`);
+fs.writeFileSync(cargoPath, cargoContent, 'utf8');
+
+console.log(`Synced version ${version} to apps/desktop/src-tauri/Cargo.toml`);

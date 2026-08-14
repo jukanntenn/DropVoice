@@ -1,0 +1,28 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default permissions for the DropVoice desktop app",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-unminimize",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:app:default",
+    "core:tray:default",
+    "core:event:default",
+    "core:path:default",
+    "store:default",
+    "shell:default",
+    "clipboard-manager:allow-write-text",
+    "autostart:default",
+    "dialog:default",
+    "process:default",
+    "updater:default"
+  ]
+}

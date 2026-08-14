@@ -1,0 +1,29 @@
+{
+  "title": "裝置",
+  "addDevice": "新增裝置",
+  "scanToConnect": "掃碼連接",
+  "removeDevice": "移除裝置",
+  "selectTarget": "選擇目標裝置",
+  "emptyState": "暫無裝置連線",
+  "maxLimit": "已達最大裝置數",
+  "invalidUrl": "無效的連線位址",
+  "cameraRequiresHTTPS": "掃碼功能需要 HTTPS 環境",
+  "cameraNotAvailable": "相機不可用",
+  "manualInput": "手動輸入位址",
+  "connectionCode": "配對碼",
+  "sendMode": {
+    "active": "目前裝置",
+    "all": "所有裝置",
+    "selected": "選擇裝置"
+  },
+  "status": {
+    "connected": "已連線",
+    "disconnected": "未連線",
+    "connecting": "連線中",
+    "reconnecting": "重新連線中"
+  },
+  "lastConnected": "最後連線：{{time}}",
+  "deviceName": "裝置名稱",
+  "autoConnect": "自動連線",
+  "desktopOffline": "桌面離線。點按重試，或切換應用後自動恢復連線。"
+}

@@ -1,0 +1,37 @@
+# 生产 Caddyfile（spec 11 §12.4）。
+# 部署：scp 到 /etc/caddy/Caddyfile，重启 caddy。
+#
+# Cloudflare 回源场景：Caddy 接收 Cloudflare 的 HTTPS 回源（端口 8443），
+# 用 Cloudflare Origin 证书（非 Let's Encrypt，因 Caddy 不直接面向公网 DNS 验证）。
+# PWA 静态资源不在 Caddy——走 Cloudflare Pages（app.dropvoice.app）。
+
+api.dropvoice.app {
+	# 监听 8443（Cloudflare 回源端口），非默认 443
+	bind 0.0.0.0 8443
+
+	# API 代理到配对服务器（localhost:38424）
+	handle /devices/* {
+		reverse_proxy localhost:38424
+	}
+	handle /pairing-codes/* {
+		reverse_proxy localhost:38424
+	}
+	# 兜底：其他路径也转给 axum（/health 等）
+	handle {
+		reverse_proxy localhost:38424
+	}
+
+	# gzip 压缩（spec 11 §10.3：服务端不压缩，Caddy 负责）
+	encode gzip
+
+	# TLS：Cloudflare Origin 证书（Full strict 模式）
+	tls /etc/caddy/cf-origin.pem /etc/caddy/cf-origin.key {
+		protocols tls1.2 tls1.3
+	}
+
+	# 安全头
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+	}
+}

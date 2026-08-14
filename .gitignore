@@ -1,38 +1,78 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# Dependencies
+node_modules/
+.pnpm-store/
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# Build outputs
+dist/
+build/
+target/
+*.tsbuildinfo
 
 # Tauri
-src-tauri/target
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Environment
 .env
 .env.local
 .env.*.local
 
-.claude/settings.local.json
-openspec/
+# Logs
+*.log
+logs/
 
-# Git worktrees
-.worktrees/
+# Docker runtime artifacts (self-host / acceptance runtime dirs)
+apps/pairing-server/docker/data/
+apps/pairing-server/docker/log/
+apps/pairing-server/docker/__pycache__/
+
+# Test artifacts
+coverage/
+test-results/
+e2e/test-results/
+e2e/playwright-report/
+e2e/playwright/.cache/
+
+# GUI test screenshots (manual verification captures)
+gui-test-screenshots/
+
+# Local scratch / experiments / reference repos (contexts are a subdir)
+.local/
+
+# Runtime databases
+*.db
+*.db-shm
+*.db-wal
+
+# Agent process plans (temporary session artifacts)
+.claude/plans/
+.zcode/plans/
+
+# Nested workspace lock (root Cargo.lock is the single source of truth)
+apps/desktop/src-tauri/Cargo.lock
+
+# Backup
+_backup/
+
+# PWA generated
+apps/mobile/public/icons/generated/
+
+# Runtime
+*.tmp
+*.bak
+
+# Local acceptance config (template: config.local.toml.example)
+apps/pairing-server/docker/config.local.toml

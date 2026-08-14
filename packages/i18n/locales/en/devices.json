@@ -1,0 +1,29 @@
+{
+  "title": "Devices",
+  "addDevice": "Add Device",
+  "scanToConnect": "Scan to Connect",
+  "removeDevice": "Remove Device",
+  "selectTarget": "Select target device",
+  "emptyState": "No devices connected",
+  "maxLimit": "Maximum devices reached",
+  "invalidUrl": "Invalid connection URL",
+  "cameraRequiresHTTPS": "Camera requires HTTPS connection",
+  "cameraNotAvailable": "Camera not available",
+  "manualInput": "Enter URL manually",
+  "connectionCode": "Connection code",
+  "sendMode": {
+    "active": "Active device",
+    "all": "All devices",
+    "selected": "Select devices"
+  },
+  "status": {
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting",
+    "reconnecting": "Reconnecting"
+  },
+  "lastConnected": "Last connected: {{time}}",
+  "deviceName": "Device name",
+  "autoConnect": "Auto connect",
+  "desktopOffline": "Desktop is offline. Tap retry or switch apps to reconnect."
+}

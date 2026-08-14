@@ -1,0 +1,62 @@
+# DropVoice pairing-server — local acceptance compose (plain HTTP).
+#
+# Mirrors the deployed topology (Caddy + axum + SQLite in one container) but
+# builds the image from the local source tree instead of pulling a registry
+# tag. Plain HTTP on :8080 — no TLS on the local box (staging terminates TLS
+# via tunnel, production via Cloudflare Origin CA; both externally, so the
+# container itself never does TLS).
+#
+# Run before pushing to staging / releasing to verify that the
+# production-shaped config actually boots and serves:
+#
+#   docker compose -f apps/pairing-server/docker/docker-compose.local.yml up -d --build
+#   python scripts/smoke.py http://localhost:8080
+#   cargo test -p dropvoice-pairing-server --test e2e-caddy -- --ignored
+#   docker compose -f apps/pairing-server/docker/docker-compose.local.yml down -v
+#
+# Runtime config lives in config.local.toml (gitignored; all fields documented
+# in the file itself), mounted at the backend's built-in path /app/config.toml.
+# Only RUST_LOG stays an environment variable (runtime verbosity, not
+# configuration).
+#
+# Like e2e, local acceptance uses no persistent data volumes: the SQLite file
+# lives entirely inside the ephemeral container's writable layer, and `down`
+# (with or without -v) yields a clean slate on every run.
+#
+# Divergences from deployed forms (all intentional, all documented):
+#   - build: local context  vs.  image: <registry>/dropvoice/pairing-server:<tag>
+#   - no TLS at all  vs.  staging HTTP behind tunnel TLS / production
+#     Cloudflare Origin CA TLS
+#   - rate limit raised to 10000 in config.local.toml for e2e / load tests
+# Everything else — Caddy routing, loopback backend, healthcheck, logging
+# limits, restart policy — matches deployed forms.
+
+services:
+  dropvoice-pairing:
+    build:
+      context: ../../..
+      dockerfile: apps/pairing-server/docker/Dockerfile
+    container_name: dropvoice-pairing-acceptance
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - ./config.local.toml:/app/config.toml:ro
+    environment:
+      - RUST_LOG=info,dropvoice_pairing_server=debug
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped

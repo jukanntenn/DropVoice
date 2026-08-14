@@ -1,0 +1,13 @@
+@import 'tailwindcss';
+@import '@dropvoice/ui/tokens/theme.css';
+@import '@dropvoice/ui/tokens/effects.css';
+
+/* 扫描 @dropvoice/ui 源码，生成 Dialog/Button 等组件用到的工具类
+   （Tailwind v4 默认只扫描 app 自身目录）。 */
+@source '../../../packages/ui/src';
+
+html,
+body,
+#root {
+  height: 100%;
+}

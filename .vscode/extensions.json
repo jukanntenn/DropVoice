@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "rust-lang.rust-analyzer",
+    "oxc.oxc-vscode",
+    "esbenp.prettier-vscode",
+    "tauri-apps.tauri-vscode",
+    "lokalise.i18n-ally",
+    "ms-python.python"
+  ]
+}

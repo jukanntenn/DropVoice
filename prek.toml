@@ -1,0 +1,96 @@
+# prek pre-commit configuration.
+# Docs: https://prek.j178.dev/
+# Setup: run `prek install` once after cloning (installs pre-commit + commit-msg git hooks).
+
+minimum_prek_version = "0.2.0"
+default_install_hook_types = ["pre-commit", "commit-msg"]
+
+# --- Built-in fast hooks (Rust-native, no Python needed) ---
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace" },
+  { id = "end-of-file-fixer" },
+  { id = "check-yaml" },
+  { id = "check-json" },
+  { id = "check-toml" },
+  { id = "check-merge-conflict" },
+  { id = "check-added-large-files" },
+  { id = "detect-private-key" },
+]
+
+# --- Local hooks (project-specific tools) ---
+# [[repos]]
+# repo = "local"
+
+# # Frontend lint
+# [[repos.hooks]]
+# id = "oxlint"
+# name = "oxlint"
+# entry = "pnpm oxlint"
+# language = "system"
+# types_or = ["javascript", "jsx", "ts", "tsx"]
+# pass_filenames = false
+
+# # Frontend format
+# [[repos.hooks]]
+# id = "prettier"
+# name = "Prettier"
+# entry = "pnpm prettier --write"
+# language = "system"
+# types_or = ["javascript", "jsx", "ts", "tsx", "json", "css"]
+
+# # Rust format - workspace root covers desktop + pairing-server
+# [[repos.hooks]]
+# id = "cargo-fmt"
+# name = "cargo fmt"
+# entry = "cargo fmt --"
+# language = "system"
+# types = ["rust"]
+# pass_filenames = true
+
+# # Rust lint - workspace covers all crates
+# [[repos.hooks]]
+# id = "cargo-clippy"
+# name = "cargo clippy"
+# entry = "cargo clippy --workspace -- -D warnings"
+# language = "system"
+# types = ["rust"]
+# pass_filenames = false
+
+# # Design system lint
+# [[repos.hooks]]
+# id = "design-md-lint"
+# name = "DESIGN.md lint"
+# entry = "npx @google/design.md lint DESIGN.md"
+# language = "system"
+# files = "^DESIGN\\.md$"
+# pass_filenames = false
+
+# # AGENTS.md / CLAUDE.md sync check
+# [[repos.hooks]]
+# id = "agents-claude-sync"
+# name = "AGENTS.md/CLAUDE.md sync"
+# entry = "python scripts/sync-agents.py"
+# language = "system"
+# files = "^(AGENTS|CLAUDE)\\.md$"
+# pass_filenames = false
+
+# # OpenAPI 文档漂移检测：pairing-server 代码/文档变更时，
+# # 校验 docs/openapi.{json,yaml} 与代码生成结果一致（tests/openapi.rs）。
+# # 不一致时运行 `cargo run -p dropvoice-pairing-server --bin gen-openapi` 重新生成。
+# [[repos.hooks]]
+# id = "openapi-drift"
+# name = "pairing-server OpenAPI spec drift"
+# entry = "cargo test -p dropvoice-pairing-server --test openapi"
+# language = "system"
+# files = "^apps/pairing-server/"
+# pass_filenames = false
+
+# # Commit message lint (commit-msg stage)
+# [[repos.hooks]]
+# id = "commitlint"
+# name = "commitlint"
+# entry = "pnpm commitlint --edit"
+# language = "system"
+# stages = ["commit-msg"]

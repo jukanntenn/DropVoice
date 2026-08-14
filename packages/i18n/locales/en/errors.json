@@ -1,0 +1,32 @@
+{
+  "serverAlreadyRunning": "Server is already running",
+  "serverStartFailed": "Server failed to start: {{reason}}",
+  "portInUse": "Port {{port}} is already in use",
+  "portBindFailed": "Failed to bind port {{port}}: {{reason}}",
+  "networkUnreachable": "Network is unreachable: {{reason}}",
+  "connectionRefused": "Connection refused",
+  "connectionTimeout": "Connection timed out",
+  "connectionLost": "Connection lost",
+  "textInjectionFailed": "Failed to inject text: {{reason}}",
+  "injectionFailed": "Text injection failed on desktop",
+  "textTooLong": "Text is too long ({{length}}/{{max}} characters)",
+  "textEmpty": "Text is empty",
+  "invalidLanguage": "Invalid language: {{lang}}",
+  "invalidTheme": "Invalid theme: {{theme}}",
+  "settingsSaveFailed": "Failed to save settings: {{reason}}",
+  "deviceNotFound": "Device not found",
+  "deviceAlreadyConnected": "Device already connected",
+  "maxDevicesReached": "Maximum devices reached ({{max}})",
+  "messageTooLarge": "Message too large ({{length}}/{{max}} bytes)",
+  "messageInvalid": "Invalid message: {{reason}}",
+  "queueFull": "Injection queue is full ({{depth}}/{{max}})",
+  "ioError": "IO error: {{path}}",
+  "internalError": "Internal error",
+  "suggestion": {
+    "checkNetwork": "Please check your network connection",
+    "checkServerRunning": "Please ensure the server is running",
+    "retryLater": "Please try again later",
+    "changePort": "Try using a different port",
+    "removeDevice": "Remove a device before adding a new one"
+  }
+}

@@ -1,0 +1,47 @@
+# Rust build artifacts
+**/target/
+**/*.rs.bk
+
+# Cargo lockfiles of nested projects (desktop has its own, not needed for pairing-server)
+apps/desktop/src-tauri/Cargo.lock
+
+# Node / frontend
+**/node_modules/
+**/dist/
+**/.vite/
+**/coverage/
+
+# Git
+.git/
+.gitignore
+.github/
+
+# IDE / tooling
+.vscode/
+.idea/
+.claude/
+.zcode/
+.agents/
+
+# Local runtime data & logs
+logs/
+**/*.db
+**/*.db-*
+apps/pairing-server/data/
+apps/pairing-server/deploy/
+test-results/
+
+# OS files
+**/.DS_Store
+**/Thumbs.db
+
+# Documentation (not needed in image)
+*.md
+specs/
+CHANGELOG.md
+CLAUDE.md
+DESIGN.md
+
+# Docker artifacts themselves (avoid recursive context bloat)
+**/Dockerfile
+**/docker-compose*.yml

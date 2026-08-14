@@ -1,0 +1,68 @@
+---
+# dropvoice pairing-server unified deployment playbook.
+#
+# A single playbook serves staging / production. The target environment is
+# selected with --limit (mandatory), and per-environment differences live in
+# group_vars/<env>.yml. Run via devops/deploy.py (Windows: dockerized ansible
+# runner):
+#
+#   python apps/pairing-server/devops/deploy.py staging
+#   python apps/pairing-server/devops/deploy.py staging --tag v0.3.0
+#   python apps/pairing-server/devops/deploy.py staging --check --diff
+#
+# The image is the single self-contained artifact (backend + Caddy + baked-in
+# mobile PWA at /app/mobile-dist); deployments upload nothing.
+
+- name: Deploy dropvoice pairing-server
+  hosts: all
+  user: "{{ user }}"
+  gather_facts: false
+
+  tasks:
+    - name: Load environment vault
+      ansible.builtin.include_vars:
+        file: "vars/{{ env }}/vault.yml"
+
+    - name: Require --limit so a single environment is targeted
+      ansible.builtin.assert:
+        that: ansible_limit is defined
+        fail_msg: >-
+          Refusing to run without --limit. Specify the environment explicitly,
+          e.g. -l dev, to avoid deploying to every host at once.
+
+    - name: Ensure application directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ app_dirs }}"
+
+    - name: Template docker-compose.yml
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ compose_file }}"
+        mode: "0644"
+
+    - name: Template Caddyfile
+      ansible.builtin.template:
+        src: "{{ caddyfile_template }}"
+        dest: "{{ caddyfile }}"
+        mode: "0644"
+
+    - name: Pull image (daemon-level, honors insecure-registries)
+      community.docker.docker_image:
+        name: "{{ image }}"
+        source: pull
+        force_source: true
+      register: image_pull
+      changed_when: image_pull.changed
+
+    - name: Recreate containers on change
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_path }}"
+        # pull: never — image is pre-pulled by docker_image above. Compose's own
+        # registry manifest check speaks HTTPS only and fails against the plain-
+        # HTTP LAN registry even when the daemon has it in insecure-registries.
+        pull: never
+        state: present
+        remove_orphans: true

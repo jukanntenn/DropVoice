@@ -1,0 +1,858 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "DropVoice Pairing & Signaling Server API",
+    "description": "公网 HTTPS 配对 + WebRTC 信令服务器。部署在 VPS 上，经 Cloudflare 回源到 Caddy:443，再反向代理到 axum 127.0.0.1:38424。\n\n## 职责边界\n本服务只做**设备注册 + WebRTC 信令转发**，绝不中继文本数据。\n手机扫码后发起 offer，服务器通过 SSE 转发给桌面，桌面回填 answer；\nSDP 交换完成后，手机↔桌面 WebRTC DataChannel P2P 直连，服务器退出。\n\n## 认证\n- `POST /api/devices`：无认证（设备注册，幂等 upsert）。\n- `PUT /api/devices/{id}/status`：Bearer token（注册时颁发的 `pairing_token`）。\n- `POST /api/devices/{id}/webrtc/offer`：body 带 code（首次配对）或 token（重连）。\n- `GET /api/devices/{id}/webrtc/events`（SSE）：query `?token=<pairing_token>`。\n- `POST /api/devices/{id}/webrtc/answer`：Bearer token。\n- `GET /api/devices/{id}/webrtc/answer/{session_id}`：session_id 自身即为凭据。",
+    "contact": {
+      "name": "DropVoice"
+    },
+    "license": {
+      "name": "MIT"
+    },
+    "version": "0.2.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.dropvoice.app",
+      "description": "生产环境（Cloudflare → Caddy:443 → axum:38424）"
+    }
+  ],
+  "paths": {
+    "/api/devices": {
+      "post": {
+        "tags": [
+          "devices"
+        ],
+        "summary": "设备注册（幂等 upsert）",
+        "description": "桌面端本地生成持久化 UUID v4 作为 device_id（首次启动后永不变更）。\n本端点为幂等 upsert 语义：\n- device_id 不存在 → 创建记录，颁发 token → 201 Created\n- device_id 存在且 token 有效 → 返回现有记录（含原 token）→ 200 OK\n- device_id 存在但 token 已过期 → 刷新 token，返回新 token → 200 OK\n重复注册是预期内的正常行为（应用重启、网络重连、IP 变化都会触发），不是冲突，不返回 409。",
+        "operationId": "registerDevice",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeviceRegisterRequest"
+              },
+              "examples": {
+                "new_device": {
+                  "summary": "首次注册",
+                  "value": {
+                    "address": {
+                      "ip": "192.168.1.100",
+                      "port": 38425
+                    },
+                    "device_id": "550e8400-e29b-41d4-a716-446655440000",
+                    "device_name": "My PC",
+                    "platform": "desktop"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "设备已存在（复用或续期）。返回现有记录；若 token 已过期，返回新 token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRegisterResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "新建设备成功，颁发 token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceRegisterResponse"
+                },
+                "example": {
+                  "address": {
+                    "ip": "192.168.1.100",
+                    "port": 38425
+                  },
+                  "created_at": "2026-07-18T12:00:00Z",
+                  "device_name": "My PC",
+                  "id": "550e8400-e29b-41d4-a716-446655440000",
+                  "pairing_token": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+                  "platform": "desktop"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/api/devices/{device_id}/status": {
+      "put": {
+        "tags": [
+          "devices"
+        ],
+        "summary": "状态/地址上报（心跳）",
+        "description": "桌面端周期性上报（DEVICE_STATUS_INTERVAL 5 分钟），IP 变化时立即触发额外上报\n（节流 IP_REPORT_THROTTLE 10 秒）。用于：① 续期 token；② 标记设备在线；\n③ IP 变化时刷新服务端记录。\n返回 401 表示 token 过期，客户端应自动重 POST /devices（同 device_id）触发续期，\n再重放本次心跳（§7.5）。",
+        "operationId": "reportStatus",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "description": "客户端生成的 UUID v4 设备标识",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusReportRequest"
+              },
+              "examples": {
+                "heartbeat": {
+                  "summary": "周期心跳",
+                  "value": {
+                    "address": {
+                      "ip": "192.168.1.100",
+                      "port": 38425
+                    }
+                  }
+                },
+                "ip_changed": {
+                  "summary": "IP 变化上报",
+                  "value": {
+                    "address": {
+                      "ip": "192.168.1.105",
+                      "port": 38425
+                    },
+                    "device_name": "Renamed PC"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "上报成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusReportResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/devices/{device_id}/webrtc/offer": {
+      "post": {
+        "tags": [
+          "webrtc-signaling"
+        ],
+        "summary": "手机发起 WebRTC offer（配对/重连）",
+        "description": "手机扫码后发起。body 带 code（首次配对）或 token（重连）+ sdp。\n服务器不校验 code/token（§3.2），只验证 device 存在，建 session（60s TTL），\n通过 SSE 推送给桌面。credential 字段透传给桌面校验。\n每 device 并发会话上限 10（§4.6），超限 429。SDP 上限 64KB。",
+        "operationId": "createOffer",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "description": "目标桌面设备 ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfferRequest"
+              },
+              "examples": {
+                "first_pair": {
+                  "summary": "首次配对",
+                  "value": {
+                    "code": "123456",
+                    "sdp": "v=0\r\n..."
+                  }
+                },
+                "reconnect": {
+                  "summary": "重连",
+                  "value": {
+                    "sdp": "v=0\r\n...",
+                    "token": "dvct_xxx"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "session 创建成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfferResponse"
+                },
+                "example": {
+                  "device": {
+                    "id": "550e8400-...",
+                    "name": "My PC"
+                  },
+                  "session_id": "9f1c-..."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "description": "SDP 载荷超过 64KB"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/DeviceOffline"
+          }
+        }
+      }
+    },
+    "/api/devices/{device_id}/webrtc/answer/{session_id}": {
+      "get": {
+        "tags": [
+          "webrtc-signaling"
+        ],
+        "summary": "手机长轮询 answer（hold 30s）",
+        "description": "手机 POST offer 后长轮询此端点。\n- answer 就绪 → 200 立即返回（accepted/rejected）\n- 30s 内无 answer → 204（桌面离线或 SSE 未就绪）\n- session 过期/不存在 → 404\nsession_id 是手机刚 POST offer 拿到的（高熵），无需额外认证。",
+        "operationId": "pollAnswer",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "description": "目标桌面设备 ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "path",
+            "description": "POST offer 返回的会话 ID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "answer 就绪",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerResponse"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "answer 尚未就绪（30s 超时），继续轮询"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/devices/{device_id}/webrtc/events": {
+      "get": {
+        "tags": [
+          "webrtc-signaling"
+        ],
+        "summary": "桌面 SSE 长连接（query token 认证）",
+        "description": "桌面维持 1 条 SSE 长连接，接收手机的 incoming offer。\n认证用 query 参数 `?token=<pairing_token>`（EventSource 不支持自定义 header，§4.2）。\n每 15s 发具名 `ping` 事件（防 CF 125s 超时 + 连接活性监测）。\noffer 事件 data 格式：`{session_id, credential, sdp}`。",
+        "operationId": "subscribeEvents",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "description": "桌面自身设备 ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "description": "pairing_token（Bearer 替代，SSE 专用）",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SSE 事件流",
+            "content": {
+              "text/event-stream": {
+                "example": "event: offer\ndata: {\"session_id\":\"...\",\"credential\":\"123456\",\"sdp\":\"v=0...\"}\n\nevent: ping\ndata: {\"ts\":1723000000}\n\n"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/devices/{device_id}/webrtc/answer": {
+      "post": {
+        "tags": [
+          "webrtc-signaling"
+        ],
+        "summary": "桌面回填 answer",
+        "description": "桌面收到 SSE offer 后，校验 credential（本地内存比对 code/token），\n生成 answer SDP 回填。accepted 时附 sdp，rejected 时附 reason（如 invalid_credential）。\n回填后唤醒手机的长轮询。",
+        "operationId": "submitAnswer",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "description": "桌面自身设备 ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerRequest"
+              },
+              "examples": {
+                "accepted": {
+                  "summary": "接受",
+                  "value": {
+                    "sdp": "v=0\r\n...",
+                    "session_id": "9f1c...",
+                    "status": "accepted"
+                  }
+                },
+                "rejected": {
+                  "summary": "拒绝（credential 错误）",
+                  "value": {
+                    "reason": "invalid_credential",
+                    "session_id": "9f1c...",
+                    "status": "rejected"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "回填成功"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "存活探针",
+        "description": "部署用存活探针（Caddy/Cloudflare 健康检查）。返回服务状态与当前镜像期望的数据库 schema 版本。",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "服务存活",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnswerDecision": {
+        "type": "string",
+        "description": "answer 决策。",
+        "enum": [
+          "accepted",
+          "rejected"
+        ]
+      },
+      "AnswerRequest": {
+        "type": "object",
+        "description": "`POST /webrtc/answer` 请求体（桌面回填）。",
+        "required": [
+          "session_id",
+          "status"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "sdp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "accepted 时必填，rejected 时省略。"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AnswerDecision",
+            "description": "`accepted` 或 `rejected`。"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "rejected 时的原因（如 `invalid_credential`）。"
+          }
+        }
+      },
+      "AnswerResponse": {
+        "type": "object",
+        "description": "`GET /webrtc/answer/{session_id}` 响应体。",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "sdp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "accepted 时有值。"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AnswerDecision"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "rejected 时的原因。"
+          }
+        }
+      },
+      "DeviceAddress": {
+        "type": "object",
+        "description": "设备局域网地址（B 线桌面端本地服务器地址）。",
+        "required": [
+          "ip",
+          "port"
+        ],
+        "properties": {
+          "ip": {
+            "type": "string",
+            "description": "设备局域网 IPv4/IPv6 地址。",
+            "example": "192.168.1.100"
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "description": "桌面端本地服务器端口（默认 38425）。",
+            "example": 38425,
+            "minimum": 0
+          }
+        }
+      },
+      "DeviceRegisterRequest": {
+        "type": "object",
+        "description": "`POST /devices` 请求体（与 `pairing-server.yaml` `DeviceRegisterRequest` 一致）。",
+        "required": [
+          "device_id",
+          "platform",
+          "address"
+        ],
+        "properties": {
+          "device_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "客户端生成的 UUID v4，持久化在 config.toml，永不变更。"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform",
+            "description": "当前仅 desktop 会注册到配对服务器。"
+          },
+          "device_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "固化的设备名（§6.6）。可选字段；缺省时由服务端记录为空，\n手机端 UI 用 `name (ip)` 组合显示。",
+            "maxLength": 64
+          },
+          "address": {
+            "$ref": "#/components/schemas/DeviceAddress",
+            "description": "桌面端当前局域网地址。"
+          }
+        }
+      },
+      "DeviceRegisterResponse": {
+        "type": "object",
+        "description": "`POST /devices` / 复用响应体（`DeviceRegisterResponse`）。",
+        "required": [
+          "id",
+          "platform",
+          "address",
+          "pairing_token",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "等同请求的 `device_id`。"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "device_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address": {
+            "$ref": "#/components/schemas/DeviceAddress"
+          },
+          "pairing_token": {
+            "type": "string",
+            "description": "64 字符随机字符串，用于后续认证。续期时此字段更新。"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DeviceSummary": {
+        "type": "object",
+        "description": "设备摘要（信令 offer 响应）。",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "设备名（可空）。"
+          }
+        }
+      },
+      "ErrorBody": {
+        "type": "object",
+        "description": "错误响应体（与 `pairing-server.yaml#/components/schemas/Error` 一致）。",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        }
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "机器可读错误码，`SCREAMING_SNAKE_CASE`。",
+            "example": "SESSION_NOT_FOUND"
+          },
+          "message": {
+            "type": "string",
+            "description": "人类可读错误信息。"
+          },
+          "details": {
+            "type": "object",
+            "description": "可选调试详情。"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "description": "`GET /health` 响应体。",
+        "required": [
+          "status",
+          "schema_version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "OfferRequest": {
+        "type": "object",
+        "description": "`POST /webrtc/offer` 请求体。code（首次配对）或 token（重连）二选一。",
+        "required": [
+          "sdp"
+        ],
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "6 位配对码（首次配对）。"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`dvct_` 连接令牌（重连）。"
+          },
+          "sdp": {
+            "type": "string",
+            "description": "手机生成的 offer SDP。"
+          }
+        }
+      },
+      "OfferResponse": {
+        "type": "object",
+        "description": "`POST /webrtc/offer` 响应体。",
+        "required": [
+          "session_id",
+          "device"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "device": {
+            "$ref": "#/components/schemas/DeviceSummary"
+          }
+        }
+      },
+      "Platform": {
+        "type": "string",
+        "description": "设备平台。当前仅 desktop 会注册到配对服务器。",
+        "enum": [
+          "desktop"
+        ],
+        "example": "desktop"
+      },
+      "StatusReportRequest": {
+        "type": "object",
+        "description": "`PUT /devices/{id}/status` 请求体（`StatusReportRequest`）。",
+        "required": [
+          "address"
+        ],
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/DeviceAddress"
+          },
+          "device_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "用户改名后携带，刷新服务端记录。",
+            "maxLength": 64
+          }
+        }
+      },
+      "StatusReportResponse": {
+        "type": "object",
+        "description": "`PUT /devices/{id}/status` 响应体（`StatusReportResponse`）。",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "请求参数无效",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            },
+            "example": {
+              "error": {
+                "code": "INVALID_REQUEST",
+                "details": {
+                  "field": "device_id"
+                },
+                "message": "The request payload is invalid"
+              }
+            }
+          }
+        }
+      },
+      "DeviceOffline": {
+        "description": "桌面无活跃 SSE 订阅（离线），offer 被快速拒绝",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            },
+            "example": {
+              "error": {
+                "code": "DEVICE_OFFLINE",
+                "message": "device not reachable / no active subscriber"
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "设备不存在",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            },
+            "example": {
+              "error": {
+                "code": "DEVICE_NOT_FOUND",
+                "message": "The device does not exist"
+              }
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "速率超限（RATE_LIMIT 1 req/IP/秒）",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            },
+            "example": {
+              "error": {
+                "code": "RATE_LIMITED",
+                "message": "Too many requests"
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Token 无效或已过期",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorBody"
+            },
+            "example": {
+              "error": {
+                "code": "TOKEN_INVALID",
+                "message": "The pairing token is invalid or expired"
+              }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque",
+        "description": "注册时颁发的 64 字符 `pairing_token`。"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "devices",
+      "description": "设备注册与状态上报"
+    },
+    {
+      "name": "webrtc-signaling",
+      "description": "WebRTC 信令（offer/answer/SSE）"
+    },
+    {
+      "name": "health",
+      "description": "健康检查"
+    }
+  ]
+}

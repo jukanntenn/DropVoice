@@ -1,0 +1,32 @@
+{
+  "serverAlreadyRunning": "サーバーは既に実行中です",
+  "serverStartFailed": "サーバーの起動に失敗しました：{{reason}}",
+  "portInUse": "ポート {{port}} は既に使用中です",
+  "portBindFailed": "ポート {{port}} のバインドに失敗しました：{{reason}}",
+  "networkUnreachable": "ネットワークに到達できません：{{reason}}",
+  "connectionRefused": "接続が拒否されました",
+  "connectionTimeout": "接続がタイムアウトしました",
+  "connectionLost": "接続が切断されました",
+  "textInjectionFailed": "テキスト注入に失敗しました：{{reason}}",
+  "injectionFailed": "デスクトップでテキスト注入に失敗しました",
+  "textTooLong": "テキストが長すぎます（{{length}}/{{max}} 文字）",
+  "textEmpty": "テキストが空です",
+  "invalidLanguage": "無効な言語：{{lang}}",
+  "invalidTheme": "無効なテーマ：{{theme}}",
+  "settingsSaveFailed": "設定の保存に失敗しました：{{reason}}",
+  "deviceNotFound": "デバイスが見つかりません",
+  "deviceAlreadyConnected": "デバイスは既に接続されています",
+  "maxDevicesReached": "最大デバイス数に達しました（{{max}}）",
+  "messageTooLarge": "メッセージが大きすぎます（{{length}}/{{max}} バイト）",
+  "messageInvalid": "無効なメッセージ：{{reason}}",
+  "queueFull": "注入キューが満杯です（{{depth}}/{{max}}）",
+  "ioError": "IO エラー：{{path}}",
+  "internalError": "内部エラー",
+  "suggestion": {
+    "checkNetwork": "ネットワーク接続を確認してください",
+    "checkServerRunning": "サーバーが実行中であることを確認してください",
+    "retryLater": "後でもう一度お試しください",
+    "changePort": "別のポートを使用してみてください",
+    "removeDevice": "新しいデバイスを追加する前に既存のデバイスを削除してください"
+  }
+}

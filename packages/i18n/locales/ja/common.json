@@ -1,0 +1,62 @@
+{
+  "app": {
+    "name": "DropVoice",
+    "description": "スマートフォンからデスクトップへテキストを送信",
+    "loading": "読み込み中...",
+    "error": "エラーが発生しました",
+    "version": "バージョン {{version}}"
+  },
+  "actions": {
+    "send": "送信",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "copy": "コピー",
+    "paste": "貼り付け",
+    "delete": "削除",
+    "remove": "削除",
+    "retry": "再試行",
+    "close": "閉じる",
+    "restore": "復元",
+    "settings": "設定",
+    "add": "追加",
+    "clear": "クリア"
+  },
+  "status": {
+    "connected": "接続済み",
+    "disconnected": "未接続",
+    "connecting": "接続中...",
+    "sending": "送信中...",
+    "reconnecting": "再接続中...",
+    "error": "エラー"
+  },
+  "lan": {
+    "warningTitle": "LAN 内でのみ使用",
+    "warningText": "信頼できるローカルネットワークでのみ使用してください。トラフィックは暗号化されません。",
+    "warningDismiss": "了解"
+  },
+  "connection": {
+    "title": "接続",
+    "url": "接続 URL",
+    "connectedDevices": "接続済みデバイス",
+    "noDevices": "デバイスが接続されていません",
+    "activeConnections": "{{count}} 件アクティブ",
+    "activeConnections_one": "{{count}} 件アクティブ",
+    "activeConnections_other": "{{count}} 件アクティブ",
+    "scanQR": "スマートフォンでQRコードをスキャン",
+    "copyLink": "またはペアリングリンクをコピー",
+    "reconnectCode": "再接続コード",
+    "reconnectCodeHint": "スマートフォンの再接続時に使用",
+    "ready": "ディクテーション可能",
+    "addDevice": "別のデバイスを追加"
+  },
+  "queue": {
+    "title": "注入キュー",
+    "depth": "キュー深度",
+    "pending": "{{count}} 件待機中",
+    "pending_one": "{{count}} 件待機中",
+    "pending_other": "{{count}} 件待機中",
+    "processing": "処理中...",
+    "empty": "キューは空です",
+    "typing": "入力中… {{count}} 件待機"
+  }
+}

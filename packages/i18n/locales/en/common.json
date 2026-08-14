@@ -1,0 +1,62 @@
+{
+  "app": {
+    "name": "DropVoice",
+    "description": "Send text from mobile to desktop",
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "version": "Version {{version}}"
+  },
+  "actions": {
+    "send": "Send",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "copy": "Copy",
+    "paste": "Paste",
+    "delete": "Delete",
+    "remove": "Remove",
+    "retry": "Retry",
+    "close": "Close",
+    "restore": "Restore",
+    "settings": "Settings",
+    "add": "Add",
+    "clear": "Clear"
+  },
+  "status": {
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connecting": "Connecting...",
+    "sending": "Sending...",
+    "reconnecting": "Reconnecting...",
+    "error": "Error"
+  },
+  "lan": {
+    "warningTitle": "LAN Use Only",
+    "warningText": "Only use on trusted local networks. Traffic is unencrypted.",
+    "warningDismiss": "Got it"
+  },
+  "connection": {
+    "title": "Connection",
+    "url": "Connection URL",
+    "connectedDevices": "Connected devices",
+    "noDevices": "No devices connected",
+    "activeConnections": "{{count}} active",
+    "activeConnections_one": "{{count}} active",
+    "activeConnections_other": "{{count}} active",
+    "scanQR": "Scan QR code with phone",
+    "copyLink": "Or copy pairing link",
+    "reconnectCode": "Reconnect code",
+    "reconnectCodeHint": "Used when your phone asks for it on reconnect",
+    "ready": "Ready to dictate",
+    "addDevice": "Add another device"
+  },
+  "queue": {
+    "title": "Injection Queue",
+    "depth": "Queue depth",
+    "pending": "{{count}} pending",
+    "pending_one": "{{count}} pending",
+    "pending_other": "{{count}} pending",
+    "processing": "Processing...",
+    "empty": "Queue is empty",
+    "typing": "typing… {{count}} queued"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "title": "デバイス",
+  "addDevice": "デバイスを追加",
+  "scanToConnect": "スキャンして接続",
+  "removeDevice": "デバイスを削除",
+  "selectTarget": "対象デバイスを選択",
+  "emptyState": "デバイスが接続されていません",
+  "maxLimit": "最大デバイス数に達しました",
+  "invalidUrl": "無効な接続 URL",
+  "cameraRequiresHTTPS": "カメラには HTTPS 接続が必要です",
+  "cameraNotAvailable": "カメラを利用できません",
+  "manualInput": "URL を手動入力",
+  "connectionCode": "ペアリングコード",
+  "sendMode": {
+    "active": "現在のデバイス",
+    "all": "すべてのデバイス",
+    "selected": "デバイスを選択"
+  },
+  "status": {
+    "connected": "接続済み",
+    "disconnected": "未接続",
+    "connecting": "接続中",
+    "reconnecting": "再接続中"
+  },
+  "lastConnected": "最終接続：{{time}}",
+  "deviceName": "デバイス名",
+  "autoConnect": "自動接続",
+  "desktopOffline": "デスクトップがオフラインです。再試行するか、アプリを切り替えて再接続してください。"
+}

@@ -1,0 +1,70 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "dev:desktop",
+      "detail": "Full Tauri app (frontend + Rust backend)",
+      "type": "shell",
+      "command": "pnpm dev:tauri",
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "tauri-dev",
+          "pattern": { "regexp": "^$" },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "VITE v",
+            "endsPattern": "Local:.*5173|Compiling|VITE.*ready"
+          }
+        }
+      ],
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "dev:pairing-server",
+      "detail": "Pairing server (Rust, port 38424)",
+      "type": "shell",
+      "command": "cargo run --manifest-path apps/pairing-server/Cargo.toml",
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "pairing-server",
+          "pattern": { "regexp": "^$" },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "Compiling",
+            "endsPattern": "pairing server listening|sqlite pool opened"
+          }
+        }
+      ],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "dev:mobile",
+      "detail": "Mobile PWA (Vite, port 5174)",
+      "type": "shell",
+      "command": "pnpm dev:mobile",
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "mobile-dev",
+          "pattern": { "regexp": "^$" },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "VITE v",
+            "endsPattern": "Local:.*5174"
+          }
+        }
+      ],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "dev:full",
+      "detail": "Desktop + pairing server (parallel)",
+      "dependsOn": ["dev:desktop", "dev:pairing-server"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}

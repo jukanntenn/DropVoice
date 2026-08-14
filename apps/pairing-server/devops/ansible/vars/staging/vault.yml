@@ -1,0 +1,5 @@
+---
+# staging secrets vault (dropvoice pairing-server).
+# 加密：ansible-vault encrypt vars/staging/vault.yml
+# SQLite 无数据库密码；当前为空。请确保提交前已加密。
+{}

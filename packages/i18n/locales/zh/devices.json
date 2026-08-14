@@ -1,0 +1,29 @@
+{
+  "title": "设备",
+  "addDevice": "添加设备",
+  "scanToConnect": "扫码连接",
+  "removeDevice": "移除设备",
+  "selectTarget": "选择目标设备",
+  "emptyState": "暂无设备连接",
+  "maxLimit": "已达最大设备数",
+  "invalidUrl": "无效的连接地址",
+  "cameraRequiresHTTPS": "扫码功能需要 HTTPS 环境",
+  "cameraNotAvailable": "摄像头不可用",
+  "manualInput": "手动输入地址",
+  "connectionCode": "配对码",
+  "sendMode": {
+    "active": "当前设备",
+    "all": "所有设备",
+    "selected": "选择设备"
+  },
+  "status": {
+    "connected": "已连接",
+    "disconnected": "未连接",
+    "connecting": "连接中",
+    "reconnecting": "重连中"
+  },
+  "lastConnected": "最后连接：{{time}}",
+  "deviceName": "设备名称",
+  "autoConnect": "自动连接",
+  "desktopOffline": "桌面离线。点按重试，或切换应用后自动恢复连接。"
+}

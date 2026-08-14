@@ -1,0 +1,100 @@
+/**
+ * Liquid-glass effects layer (hand-written, NOT generated).
+ *
+ * The @google/design.md exporter can only emit color / typography / radius / spacing
+ * tokens — it cannot express box-shadows, keyframes, @custom-variant, or the page
+ * gradient. Those live here. Imported by each app AFTER theme.css so @theme values in
+ * this file override the generated ones (notably the real Inter font stack — the exporter
+ * quote-wraps fontFamily, collapsing the comma list into one family name).
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Real font stacks (override the exporter's quote-wrapped single-string values). */
+  --font-sans:
+    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+    monospace;
+
+  /* Liquid-glass shadows. */
+  --shadow-glass: 0 8px 32px 0 rgb(13 148 136 / 0.12);
+  --shadow-glass-dark: 0 8px 32px 0 rgb(0 0 0 / 0.25);
+  --shadow-glow: 0 0 40px rgb(13 148 136 / 0.15);
+  --shadow-glow-accent: 0 0 40px rgb(249 115 22 / 0.2);
+
+  /* Motion. */
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+  --easing-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Z-index scale. */
+  --z-base: 0;
+  --z-dropdown: 10;
+  --z-sticky: 20;
+  --z-modal: 30;
+  --z-toast: 40;
+  --z-tooltip: 50;
+
+  /* Animation tokens → generate animate-* utilities. */
+  --animate-fade-in: fade-in var(--duration-base) var(--easing-ease-in-out);
+  --animate-slide-up: slide-up var(--duration-base) var(--easing-ease-in-out);
+  --animate-scale-in: scale-in var(--duration-fast) var(--easing-ease-in-out);
+  --animate-shimmer: shimmer 1.5s linear infinite;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: -200% 0;
+    }
+    to {
+      background-position: 200% 0;
+    }
+  }
+}
+
+/* Liquid gradient page background (light). */
+body {
+  min-height: 100vh;
+  font-family: var(--font-sans);
+  color: var(--color-neutral-900);
+  background: linear-gradient(to bottom right, #f0fdfa 0%, #ffffff 50%, #ecfeff 100%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.dark body {
+  color: var(--color-neutral-50);
+  background: linear-gradient(to bottom right, #020617 0%, #0f172a 50%, #020617 100%);
+}

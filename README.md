@@ -1,98 +1,82 @@
 # DropVoice
 
-DropVoice enables sending voice-to-text input from your mobile phone to a PC.
-
-English | [简体中文](README_zh.md)
-
-## Features
-
-- 🖥️ **Cross-Platform**: Windows, macOS, and Linux support
-- 📡 **LAN Communication**: QR code connection + instant WebSocket transmission
-- 🌐 **Multi-language**: English and Chinese UI
-- 🎨 **Multi-Theme**: Light, dark, and system modes
-- 📲 **Mobile-Friendly**: Settings page + PWA support
-
-![DropVoice Screenshot](assets/screenshot.png)
+Send voice-to-text input from your mobile phone to your PC via LAN.
 
 ## Quick Start
 
-### Installation
+### Prerequisites
 
-Download the latest release for your platform from [Releases](https://github.com/jukanntenn/DropVoice/releases).
+- [Node.js](https://nodejs.org/) ≥ 22
+- [pnpm](https://pnpm.io/) ≥ 11
+- [Rust](https://www.rust-lang.org/) ≥ 1.75
 
-### Usage
-
-1. 🚀 **Start DropVoice** on your PC
-   - Server starts automatically
-   - QR code displayed for connection
-
-2. 📱 **Connect from Mobile**
-   - Scan QR code with your phone
-   - Mobile browser opens DropVoice interface
-
-3. ⌨️ **Send Text**
-   - Type in the mobile input field
-   - Press Enter or tap "Send to PC"
-   - Text appears at cursor position on your PC
-
-### Linux Requirements
-
-Linux users need `xdotool` for text input:
+### Install
 
 ```bash
-# Ubuntu/Debian
-sudo apt install xdotool
-
-# Fedora
-sudo dnf install xdotool
-
-# Arch Linux
-sudo pacman -S xdotool
+git clone https://github.com/jukanntenn/DropVoice.git
+cd DropVoice
+pnpm install
 ```
 
-### macOS Requirements
+### Development
 
-On macOS, after installation:
+```bash
+# Start the full Tauri app (frontend + backend)
+pnpm tauri dev
 
-1. **Allow app to open**: Right-click the app and select "Open" on first launch, or go to System Settings → Privacy & Security → click "Open Anyway"
-2. **Grant Accessibility permission**: Go to System Settings → Privacy & Security → Accessibility → add DropVoice to the list
-   - Required for keyboard text injection
-   - Without this permission, text will not appear on your PC
+# Frontend only (for UI development)
+pnpm dev
 
-## Security Considerations
+# Mobile PWA (accessible on LAN)
+pnpm dev:mobile
+```
 
-⚠️ **IMPORTANT**: DropVoice is designed for trusted LAN networks only.
+### Build
 
-- No authentication beyond basic token
-- No encryption for WebSocket traffic
-- Use only on secure home/office networks
+```bash
+pnpm build          # Build frontend
+pnpm tauri build    # Build production installer
+```
 
-## Troubleshooting
+### Test
 
-### Mobile cannot connect
+```bash
+pnpm test                    # Frontend tests
+pnpm test:rust               # Rust backend tests
+pnpm test:all                # All tests
+cargo test -p dropvoice-pairing-server  # Pairing server tests
+```
 
-- Verify PC and mobile are on the same network
-- Check firewall allows port 38425
-- Verify server is running
+## Architecture
 
-### Text not appearing
+DropVoice is a Tauri application with:
 
-- Ensure cursor is in a text input field on PC
-- Check WebSocket connection is active
+- **Desktop app** (`apps/desktop/`) — Tauri v2 + React + Rust backend
+- **Mobile PWA** (`apps/mobile/`) — React + WebSocket client
+- **Pairing server** (`apps/pairing-server/`) — Axum HTTP service for device discovery
+- **Shared packages** (`packages/`) — Core logic, UI components, i18n
 
-### Chinese input method issues
+```
+┌─────────────────┐         ┌──────────────────┐         ┌─────────────────┐
+│  Mobile Browser │ ──WS──> │  Tauri Backend   │ ──API──> │  React Frontend │
+│  (PWA)          │         │  (Rust/Tokio)    │         │  (src/*.tsx)    │
+└─────────────────┘         └──────────────────┘         └─────────────────┘
+                                     │
+                                     └──> Keyboard Injection (enigo)
+```
 
-Some applications have compatibility issues with Chinese input methods:
+## Configuration
 
-- **Telegram garbled text**: Text may appear garbled when using Chinese input method
-- **Chinese punctuation swallowed**: Chinese punctuation marks may not appear correctly
+Configuration is stored in `dropvoice.toml` (platform-specific config directory).
 
-**Workaround**: Switch to English input method on your PC before sending text from mobile.
+See [specs/full/14-configuration.md](specs/full/14-configuration.md) for the full configuration reference.
+
+## Documentation
+
+- [Technical Specifications](specs/full/) — Complete system design
+- [Design System](DESIGN.md) — Visual language and design tokens
+- [Changelog](CHANGELOG.md) — Version history
 
 ## License
 
-MIT License
-
-## Support
-
-For issues and feature requests, please use the [GitHub issue tracker](https://github.com/jukanntenn/DropVoice/issues).
+MIT

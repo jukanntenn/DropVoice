@@ -1,0 +1,24 @@
+---
+# Shared variables for every dropvoice pairing-server environment. Per-environment
+# overrides live in group_vars/<env>.yml; per-host facts (user, home) in host_vars/.
+
+app_name: dropvoice-pairing
+apps_path: "{{ home }}/docker"
+app_path: "{{ apps_path }}/{{ app_name }}"
+compose_file: "{{ app_path }}/docker-compose.yml"
+caddyfile: "{{ app_path }}/Caddyfile"
+
+# Internal topology is identical across every environment:
+#   - Rust axum backend listens loopback-only on 127.0.0.1:38424 (LISTEN_ADDR,
+#     never published).
+#   - Caddy is the only published port: HTTP form :8080, TLS form :4443
+#     (acceptance self-signed / production Cloudflare Origin CA).
+backend_port: 38424
+caddy_port_http: 8080
+caddy_port_tls: 4443
+
+# SQLite database file lives at /app/data/pairing.db in the app container
+# (dropvoice-data named volume), never published on the host. markpost runs a
+# sibling postgres over a shared Unix-socket volume; this project uses embedded
+# SQLite, so the data volume plays the sibling's role with the same isolation.
+database_url: sqlite:///app/data/pairing.db?mode=rwc

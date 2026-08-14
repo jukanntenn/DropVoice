@@ -1,0 +1,52 @@
+# {{ ansible_managed }}
+# dropvoice pairing-server docker-compose (rendered for {{ env }}).
+#
+# Topology is identical across staging / production: a single container
+# (s6-overlay supervising Caddy + the Rust axum backend) with the SQLite
+# database in the dropvoice-data named volume at /app/data — never published on
+# the host (markpost's sibling-postgres-over-Unix-socket mechanism, adapted for
+# embedded SQLite). Per-environment differences are confined to the published
+# host port, the Caddyfile (TLS shape) and whether the certs directory is
+# bind-mounted (production only, for the Cloudflare Origin CA cert). The mobile
+# PWA is baked into the image at /app/mobile-dist — no uploads, no host-side
+# dist volume. Rolling JSON logs are bind-mounted in every environment.
+services:
+  dropvoice-pairing:
+    image: {{ image }}
+    container_name: {{ app_name }}
+    ports:
+      - "{{ host_port }}:{{ caddy_port }}"
+    volumes:
+      - {{ caddyfile }}:/etc/caddy/Caddyfile:ro
+      - {{ app_path }}/log:/app/log
+      - dropvoice-data:/app/data
+{% if env == 'production' %}
+      - {{ app_path }}/certs:/app/certs:ro
+{% endif %}
+    environment:
+      - LISTEN_ADDR=127.0.0.1:{{ backend_port }}
+      - DATABASE_URL={{ database_url }}
+      - LOG_DIR=/app/log
+      - CORS_ORIGINS={{ cors_origins | default('') }}
+      - RUST_LOG={{ 'info,dropvoice_pairing_server=debug' if debug else 'info' }}
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+{% if tls_profile == 'origin' %}
+        - -k
+{% endif %}
+        - "{{ 'https' if tls_profile == 'origin' else 'http' }}://127.0.0.1:{{ caddy_port }}/health"
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: always
+volumes:
+  dropvoice-data:

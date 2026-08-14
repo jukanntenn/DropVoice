@@ -1,0 +1,10 @@
+# sqlx-cli configuration for dropvoice-pairing-server.
+# Docs: https://docs.rs/sqlx/latest/sqlx/macro.migrate.html
+
+[create]
+# Simple migrations (single .sql file) are the default. Use --reversible /
+# -r flag on `sqlx migrate add` for migrations that need a down-migration.
+default_migration_type = "simple"
+
+# Timestamp versioning (YYYYMMDDHHMMSS) matches existing migration naming.
+default_versioning = "timestamp"
