@@ -1,12 +1,12 @@
 // k6 压测脚本：心跳稳态（spec 11 §13.3 场景②）。
 // 写入密集场景：PUT /status 触发 batch flush 写磁盘。
 //
-// 运行：k6 run tests/load/heartbeat.js -e BASE_URL=https://localhost:4443
+// 运行：k6 run tests/load/heartbeat.js -e BASE_URL=http://localhost:8080
 
 import http from 'k6/http';
 import { check } from 'k6';
 
-const BASE = __ENV.BASE_URL || 'https://localhost:4443';
+const BASE = __ENV.BASE_URL || 'http://localhost:8080';
 
 export const options = {
   scenarios: {

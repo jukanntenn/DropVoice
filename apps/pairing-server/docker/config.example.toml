@@ -1,0 +1,20 @@
+# DropVoice pairing-server 自部署配置模板。
+#
+# 用法：cp docker/config.example.toml docker/config.toml
+#       docker compose up -d   （docker-compose.yml 挂载 ./config.toml → /app/config.toml）
+# 可删除任意字段（回落内置默认值）；环境变量逃生舱见 src/config.rs。
+# 应用行为（限流/CORS）都在这里改 —— compose 只保留宿主端口与日志级别。
+# 调试开关只走 env（ENABLE_DOCS=true 开 Swagger UI / RUST_LOG）。
+
+# axum 监听地址（容器内固定：仅回环，由 Caddy 反代；勿改）
+listen_addr = "127.0.0.1:38424"
+
+# SQLite（dropvoice-data 命名卷，容器外不可见；勿改）
+database_url = "sqlite:///app/data/pairing.db?mode=rwc"
+
+# 速率限制（每 IP 每秒请求数；默认 1）
+# rate_limit_per_sec = 1
+
+# CORS origin 列表。仅当打包桌面 App（origin: http://tauri.localhost /
+# tauri://localhost）直连本服务器时需要；手机 PWA 与 API 同域，无需设置。
+# cors_origins = ["http://tauri.localhost", "tauri://localhost"]

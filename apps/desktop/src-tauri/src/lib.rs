@@ -138,12 +138,14 @@ pub fn run() {
             commands::server::validate_credential,
             commands::server::refresh_pairing_token,
             commands::server::get_pairing_token,
+            commands::server::get_signaling_url,
             commands::server::register_client,
             commands::server::unregister_client,
             commands::settings::get_settings,
             commands::settings::set_language,
             commands::settings::set_theme,
             commands::settings::set_input_delay,
+            commands::settings::set_autostart,
             commands::window::minimize_to_tray,
         ])
         .build(tauri::generate_context!())

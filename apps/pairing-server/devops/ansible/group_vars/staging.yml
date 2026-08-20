@@ -1,7 +1,8 @@
 ---
 # staging（fn @ 192.168.5.200）— 生产形态自托管验证场（dogfooding）。
 # HTTPS 由内网隧道在外部终止（dropvoice.bytehome.fun，运维操作）；Caddy
-# 内部保持 HTTP 形态。与生产的差异收敛为纯配置（域名/registry/TLS 终止点）。
+# 内部保持 HTTP 形态（直接 copy docker/Caddyfile）。与生产的差异收敛为
+# 纯配置（域名/registry/TLS 终止点）。
 #
 # 默认部署 `main` tag（指向最新 main 分支）；固定版本 / 回滚用
 # deploy.py --tag <git-describe>（不可变 tag 由 docker/build.py --tags 推送）。
@@ -11,20 +12,22 @@ image_tag: main
 registry: "192.168.5.50:5000"
 image: "{{ registry }}/dropvoice/pairing-server:{{ image_tag }}"
 
+# Public entry point (TLS terminated by the ops-managed intranet tunnel);
+# the playbook's post-deploy smoke check runs against it.
+public_url: "https://dropvoice.bytehome.fun"
+
 # 宿主发布端口：与隧道现状对齐（内网隧道指向 fn:8888，运维事实，勿随意改动）。
 host_port: 8888
 caddy_port: 8080
 tls_profile: http
-caddyfile_template: Caddyfile.staging
 
 debug: false
 
-# 桌面 webview 跨域直连信令服务器（§10.5 盲区补充）：
-#   - dev 桌面（http://localhost:5173）——dogfooding 常用形态
-#   - 打包桌面（http://tauri.localhost / tauri://localhost）
-#   - staging 同域 PWA 入口（https://dropvoice.bytehome.fun）
-# PWA 与 API 同域无 CORS。
-cors_origins: 'https://dropvoice.bytehome.fun,http://localhost:5173,http://tauri.localhost,tauri://localhost'
+# CORS 由 config.toml.j2 从 public_url + tauri webview 固定 origin 自动推导，
+# 环境不再手写 cors 列表。此处只声明额外项：dev 桌面（http://localhost:5173）
+# 直连 staging 是 dogfooding 常用形态。
+cors_extra_origins:
+  - http://localhost:5173
 
 app_dirs:
   - "{{ apps_path }}"

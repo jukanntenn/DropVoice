@@ -1,0 +1,26 @@
+# DropVoice pairing-server 本地开发配置模板。
+#
+# 用法：cp config.local.toml.example config.local.toml（本文件同目录）。
+# config.local.toml 已 gitignore；裸跑（cargo run）时自动加载（见 src/config.rs）。
+#
+# 加载优先级（低→高）：内置默认值 → /app/config.toml（容器）→
+# config.local.toml（开发裸跑）→ 环境变量覆盖（LISTEN_ADDR / DATABASE_URL /
+# RATE_LIMIT_PER_SEC / CORS_ORIGINS，仅临时覆盖的逃生舱）。
+# 可删除任意字段（回落内置默认值）；文件损坏则启动即失败。
+# 调试开关（ENABLE_DOCS / RUST_LOG）只走 env，不入 TOML —— Swagger UI 用
+# `ENABLE_DOCS=true cargo run`（tasks.json 的 dev:pairing-server 已内置）。
+
+# axum 监听地址（仅回环；经 Caddy 反代的部署形态固定 127.0.0.1:38424，勿改）
+listen_addr = "127.0.0.1:38424"
+
+# SQLite 数据库路径（默认：平台数据目录；mode=rwc 不存在即建）
+# database_url = "sqlite://apps/pairing-server/data/pairing.db?mode=rwc"
+
+# 速率限制（每 IP 每秒请求数；内置默认 1。本地跑 e2e / 压测时调大）
+rate_limit_per_sec = 10000
+
+# CORS origin 列表（§10.5：桌面 webview 跨端口/跨域直连信令服务器时需要；
+# 手机 PWA 与 API 同域无 CORS。空列表 = 不启用）。
+#   - tauri dev（http://localhost:5173）
+#   - 打包桌面（Windows WebView2：http://tauri.localhost / tauri://localhost）
+cors_origins = ["http://localhost:5173", "http://tauri.localhost", "tauri://localhost"]

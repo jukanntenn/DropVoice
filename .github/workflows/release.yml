@@ -21,7 +21,7 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           draft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
@@ -106,10 +106,9 @@ jobs:
     needs: [create-release, build]
     runs-on: ubuntu-latest
     steps:
+      # action-gh-release@v2 dropped the release_id input; un-draft explicitly
+      # via gh (the draft was created against this tag by create-release).
       - name: Publish Release
-        uses: softprops/action-gh-release@v1
-        with:
-          release_id: ${{ needs.create-release.outputs.release_id }}
-          draft: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" --draft=false

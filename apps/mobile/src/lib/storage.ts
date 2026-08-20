@@ -6,12 +6,14 @@
  * - `dropvoice:last_sent:{deviceId}` → 上次成功发送的文本
  * - `dropvoice:pairing:{deviceId}` → 配对码（8 位数字）
  * - `dropvoice:token:{deviceId}` → 服务端下发的连接 token（UUID）
+ * - `dropvoice:client-id` → 本机稳定 clientId（每台手机一个，供桌面按设备去重计数）
  */
 
 const DRAFT_PREFIX = 'dropvoice:draft:';
 const LAST_SENT_PREFIX = 'dropvoice:last_sent:';
 const PAIRING_PREFIX = 'dropvoice:pairing:';
 const TOKEN_PREFIX = 'dropvoice:token:';
+const CLIENT_ID_KEY = 'dropvoice:client-id';
 
 function safeGet(key: string): string | null {
   if (typeof window === 'undefined') return null;
@@ -88,4 +90,30 @@ export function setToken(deviceId: string, token: string): void {
 
 export function clearToken(deviceId: string): void {
   safeRemove(`${TOKEN_PREFIX}${deviceId}`);
+}
+
+/**
+ * 本机稳定的 clientId（UUID v4）。
+ *
+ * 桌面 `ConnectionManager` 以此 key 跟踪已连接手机——同一台手机无论重连多少次
+ * 都只计一次，避免"断连重连后活跃设备数虚增"。首次访问时生成并持久化。
+ */
+export function getClientId(): string {
+  const existing = safeGet(CLIENT_ID_KEY);
+  if (existing) return existing;
+  const id = newUuid();
+  safeSet(CLIENT_ID_KEY, id);
+  return id;
+}
+
+function newUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // 非安全上下文 / 旧 WebView 兜底。
+  const rnd = () =>
+    Math.floor(Math.random() * 0x10000)
+      .toString(16)
+      .padStart(4, '0');
+  return `m-${rnd()}${rnd()}-${rnd()}-${rnd()}-${rnd()}-${rnd()}${rnd()}${rnd()}`;
 }

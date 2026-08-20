@@ -89,15 +89,17 @@ fn build_exempt_router(state: state::AppState) -> Router {
 
 /// `GET /health` —— 存活探针（部署探活）。无 `/api` 前缀。
 ///
-/// 返回服务状态与当前镜像期望的数据库 schema 版本（`store::MIGRATOR.version()`）。
-/// 部署冒烟用它断言「迁移已随镜像应用」；部署/回滚前后版本可对比。
+/// 返回服务状态、构建版本与当前镜像期望的数据库 schema 版本
+/// （`store::MIGRATOR.version()`）。部署冒烟用它断言「迁移已随镜像应用」，
+/// 并比对 `version`（镜像构建时烘焙的 `APP_VERSION`，即 `git describe`）
+/// 抓住「健康但仍在跑旧镜像」——部署/回滚前后版本可对比。
 #[utoipa::path(
     get,
     path = "/health",
     tag = "health",
     operation_id = "getHealth",
     summary = "存活探针",
-    description = "部署用存活探针（Caddy/Cloudflare 健康检查）。返回服务状态与当前镜像期望的数据库 schema 版本。",
+    description = "部署用存活探针（Caddy/Cloudflare 健康检查）。返回服务状态、构建版本（APP_VERSION，git describe）与当前镜像期望的数据库 schema 版本。",
     responses(
         (status = 200, description = "服务存活", body = HealthResponse, content_type = "application/json")
     )
@@ -110,6 +112,7 @@ pub async fn health() -> Json<HealthResponse> {
             .map(|m| m.version)
             .max()
             .unwrap_or_default(),
+        version: std::env::var("APP_VERSION").unwrap_or_else(|_| "dev".to_string()),
     })
 }
 
@@ -118,6 +121,8 @@ pub async fn health() -> Json<HealthResponse> {
 pub struct HealthResponse {
     pub status: String,
     pub schema_version: i64,
+    /// 构建版本（镜像内 `APP_VERSION` = `git describe`；本地 dev 运行为 "dev"）。
+    pub version: String,
 }
 
 /// 应用启动：合并限速/豁免路由 + CORS + docs，绑定监听地址。
@@ -174,11 +179,11 @@ pub async fn serve(config: Config, state: state::AppState) -> anyhow::Result<()>
             ),
     );
 
-    if config.enable_docs {
+    if crate::config::enable_docs() {
         app = app.merge(crate::docs::build_docs_router());
     }
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    tracing::info!(%addr, docs_enabled = config.enable_docs, "pairing server listening");
+    tracing::info!(%addr, docs_enabled = crate::config::enable_docs(), "pairing server listening");
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
@@ -210,6 +215,7 @@ mod tests {
         let result = health().await;
         assert_eq!(result.status, "ok");
         assert!(result.schema_version > 0);
+        assert_eq!(result.version, "dev"); // APP_VERSION unset outside the image
     }
 
     /// 测试限速 + 豁免 Router 合并后 /health 路由可用。
@@ -251,7 +257,6 @@ mod tests {
             listen_addr: addr,
             database_url: String::new(),
             rate_limit_per_sec: 1000,
-            enable_docs: false,
             cors_origins: Vec::new(),
         };
         let result = serve(cfg, state).await;

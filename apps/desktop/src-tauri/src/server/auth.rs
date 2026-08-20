@@ -7,6 +7,14 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::{DateTime, Duration, Utc};
 use rand::Rng;
 
+use crate::config::ConnectionTokenRecord;
+
+/// 连接令牌 TTL：签发后 30 天内有效，之后手机需重新配对（重新扫码）。
+///
+/// 令牌持久化在 config.toml（`device.connected_tokens`）——重启桌面不丢，
+/// 但过期即失效，避免令牌永续持有（与 5min 配对码形成时间梯度）。
+pub const CONNECTION_TOKEN_TTL: Duration = Duration::days(30);
+
 /// 生成 6 位数字配对码（19.9 bit 熵，§3.2）。
 ///
 /// code 只在 QR 中和桌面屏幕上出现，从不在公网传输——它随 SDP offer 走信令
@@ -45,9 +53,14 @@ pub fn generate_connection_token() -> String {
     format!("dvct_{}", URL_SAFE_NO_PAD.encode(bytes))
 }
 
-/// Verifies a connection token against the list of issued tokens.
-pub fn verify_connection_token(token: &str, stored: &[String]) -> bool {
-    stored.iter().any(|t| t == token)
+/// Verifies a connection token against the list of issued tokens (with TTL).
+///
+/// `stored` 是持久化的令牌记录；token 必须存在**且**未超过 30 天 TTL。
+pub fn verify_connection_token(token: &str, stored: &[ConnectionTokenRecord]) -> bool {
+    let now = Utc::now();
+    stored
+        .iter()
+        .any(|r| r.token == token && now.signed_duration_since(r.issued_at) <= CONNECTION_TOKEN_TTL)
 }
 
 #[cfg(test)]
@@ -135,13 +148,39 @@ mod tests {
     #[test]
     fn verify_issued_token() {
         let token = generate_connection_token();
-        let stored = vec![token.clone()];
+        let stored = vec![ConnectionTokenRecord {
+            token: token.clone(),
+            issued_at: Utc::now(),
+        }];
         assert!(verify_connection_token(&token, &stored));
     }
 
     #[test]
     fn reject_unknown_token() {
-        let stored = vec!["dvct_abc".to_string()];
+        let stored = vec![ConnectionTokenRecord {
+            token: "dvct_abc".into(),
+            issued_at: Utc::now(),
+        }];
         assert!(!verify_connection_token("dvct_xyz", &stored));
+    }
+
+    #[test]
+    fn reject_expired_connection_token() {
+        let token = generate_connection_token();
+        let stored = vec![ConnectionTokenRecord {
+            token: token.clone(),
+            issued_at: Utc::now() - CONNECTION_TOKEN_TTL - Duration::days(1),
+        }];
+        assert!(!verify_connection_token(&token, &stored));
+    }
+
+    #[test]
+    fn token_within_ttl_is_valid() {
+        let token = generate_connection_token();
+        let stored = vec![ConnectionTokenRecord {
+            token: token.clone(),
+            issued_at: Utc::now() - CONNECTION_TOKEN_TTL + Duration::minutes(1),
+        }];
+        assert!(verify_connection_token(&token, &stored));
     }
 }

@@ -1,0 +1,19 @@
+# DropVoice pairing-server 容器验收配置（入库；无秘密，全是验收通用值）。
+#
+# 由 docker/docker-compose.local.yml 挂载进容器 /app/config.toml（后端内建
+# 探测路径）。加载优先级与环境变量逃生舱见 src/config.rs。
+#
+# 与部署形态（staging/production）的差异全部收敛在此与 compose env：
+#   - rate limit 放开（10000）：e2e / 冒烟 / 压测不触发限流
+#   - Swagger docs 开启（compose env ENABLE_DOCS=true；调试开关不入 TOML）
+#   - CORS 覆盖 tauri dev + 打包桌面（验收跑桌面端真实配对）
+
+# axum 监听地址（仅回环，经 Caddy 反代；容器内固定此值，勿改）
+listen_addr = "127.0.0.1:38424"
+
+# SQLite（compose.local 无持久卷，数据在容器可写层，down -v 即清空）
+database_url = "sqlite:///app/data/pairing.db?mode=rwc"
+
+rate_limit_per_sec = 10000
+
+cors_origins = ["http://localhost:5173", "http://tauri.localhost", "tauri://localhost"]

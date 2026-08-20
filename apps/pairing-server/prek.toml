@@ -1,0 +1,54 @@
+# apps/pairing-server — Rust pairing/signaling server. Workspace mode runs
+# these hooks with cwd=apps/pairing-server (a member of the root cargo
+# workspace). Root builtins still cover these files.
+
+[[repos]]
+repo = "local"
+
+# ---- format group: mutating fixers ----
+[[repos.hooks]]
+id = "rustfmt"
+name = "cargo fmt (pairing-server)"
+language = "system"
+entry = "cargo fmt --manifest-path Cargo.toml --"
+files = "\\.rs$"
+pass_filenames = true
+groups = ["format"]
+stages = ["pre-commit"]
+
+# ---- lint group: read-only gates ----
+[[repos.hooks]]
+id = "clippy"
+name = "cargo clippy (pairing-server)"
+language = "system"
+entry = "cargo clippy --manifest-path Cargo.toml -- -D warnings"
+files = "\\.rs$"
+pass_filenames = false
+groups = ["lint"]
+stages = ["pre-commit"]
+
+# ---- check group ----
+
+# Generated-docs drift gate: docs/openapi.{json,yaml} must byte-match the
+# utoipa compile-time output (tests/openapi.rs). Any change in this project
+# re-verifies. Regenerate: cargo run -p dropvoice-pairing-server --bin gen-openapi
+[[repos.hooks]]
+id = "openapi-drift"
+name = "pairing-server OpenAPI spec drift"
+language = "system"
+entry = "cargo test --manifest-path Cargo.toml --test openapi"
+files = ""
+pass_filenames = false
+groups = ["check"]
+stages = ["pre-commit"]
+
+# Tests (pre-push)
+[[repos.hooks]]
+id = "cargo-test"
+name = "cargo test (pairing-server)"
+language = "system"
+entry = "cargo test --manifest-path Cargo.toml"
+files = "\\.rs$"
+pass_filenames = false
+groups = ["check"]
+stages = ["pre-push"]

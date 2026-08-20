@@ -11,11 +11,15 @@
 
 FROM python:3.12-slim
 
-RUN pip install --no-cache-dir ansible-core && \
-    ansible-galaxy collection install community.docker
+# Version pins: ansible-core pinned here (community.docker requires >=2.17;
+# 2.18.* per requirements.yml), the collection comes from requirements.yml so
+# that file stays the auditable single source for collection versions.
+COPY requirements.yml /tmp/requirements.yml
+RUN pip install --no-cache-dir 'ansible-core==2.18.*' && \
+    ansible-galaxy collection install -r /tmp/requirements.yml
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends openssh-client ca-certificates && \
+    apt-get install -y --no-install-recommends openssh-client ca-certificates git && \
     rm -rf /var/lib/apt/lists/*
 
 COPY entrypoint.sh /entrypoint.sh

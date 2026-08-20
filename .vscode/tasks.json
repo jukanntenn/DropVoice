@@ -3,9 +3,14 @@
   "tasks": [
     {
       "label": "dev:desktop",
-      "detail": "Full Tauri app (frontend + Rust backend)",
+      "detail": "Tauri app → local pairing-server (localhost:38424)",
       "type": "shell",
       "command": "pnpm dev:tauri",
+      "options": {
+        "env": {
+          "PAIRING_SERVER_URL": "http://localhost:38424"
+        }
+      },
       "isBackground": true,
       "problemMatcher": [
         {
@@ -26,6 +31,11 @@
       "detail": "Pairing server (Rust, port 38424)",
       "type": "shell",
       "command": "cargo run --manifest-path apps/pairing-server/Cargo.toml",
+      "options": {
+        "env": {
+          "ENABLE_DOCS": "true"
+        }
+      },
       "isBackground": true,
       "problemMatcher": [
         {
@@ -42,7 +52,7 @@
     },
     {
       "label": "dev:mobile",
-      "detail": "Mobile PWA (Vite, port 5174)",
+      "detail": "Mobile PWA (Vite, :5174; /api proxied to :38424)",
       "type": "shell",
       "command": "pnpm dev:mobile",
       "isBackground": true,
@@ -61,10 +71,58 @@
     },
     {
       "label": "dev:full",
-      "detail": "Desktop + pairing server (parallel)",
-      "dependsOn": ["dev:desktop", "dev:pairing-server"],
+      "detail": "Desktop + pairing server + mobile (parallel)",
+      "dependsOn": ["dev:desktop", "dev:pairing-server", "dev:mobile"],
       "dependsOrder": "parallel",
       "problemMatcher": []
+    },
+    {
+      "label": "accept:desktop",
+      "detail": "Tauri app → local acceptance container (localhost:8080, run `pnpm accept:up` first)",
+      "type": "shell",
+      "command": "pnpm dev:tauri",
+      "options": {
+        "env": {
+          "PAIRING_SERVER_URL": "http://localhost:8080"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "tauri-dev",
+          "pattern": { "regexp": "^$" },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "VITE v",
+            "endsPattern": "Local:.*5173|Compiling|VITE.*ready"
+          }
+        }
+      ],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "accept:mobile",
+      "detail": "Mobile PWA → local acceptance container (:5174, /api proxied to :8080)",
+      "type": "shell",
+      "command": "pnpm dev:mobile",
+      "options": {
+        "env": {
+          "VITE_API_PROXY_TARGET": "http://localhost:8080"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "mobile-dev",
+          "pattern": { "regexp": "^$" },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": "VITE v",
+            "endsPattern": "Local:.*5174"
+          }
+        }
+      ],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
     }
   ]
 }

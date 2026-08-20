@@ -21,8 +21,12 @@ async fn main() -> anyhow::Result<()> {
     observability::init_tracing();
     tracing::info!("DropVoice pairing/signaling server starting");
 
-    // 2. config（内置默认 → CONFIG_PATH TOML → env 覆盖）
-    let cfg = config::Config::load();
+    // 2. config（内置默认 → TOML 文件 → env 覆盖）。配置文件损坏时启动即失败，
+    //    不静默回落默认值（限流/CORS/DB 路径漂移的排查成本远高于一次明确失败）。
+    let cfg = config::Config::load().unwrap_or_else(|e| {
+        eprintln!("configuration error: {e}");
+        std::process::exit(1);
+    });
     tracing::info!(listen_addr = %cfg.listen_addr, rate_limit = cfg.rate_limit_per_sec);
 
     // 3. DB pool + migrations

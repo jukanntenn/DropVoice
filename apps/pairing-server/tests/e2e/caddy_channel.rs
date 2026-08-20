@@ -82,6 +82,9 @@ async fn caddy_proxy_register_device() {
 // E2E-CADDY-04: WebRTC 信令流经 Caddy
 // ──────────────────────────────────────────────────────────────────────────────
 
+/// 桌面在线（先建立 SSE 订阅）→ offer 被接受并推送 → answer 回填成功。
+/// offer 的 503 fast-fail（无订阅，§7）由 `offer_rejected_without_subscriber`
+/// 单元侧覆盖；本测试走完整链路，与真实配对路径一致。
 #[tokio::test]
 #[ignore]
 async fn caddy_proxy_webrtc_signaling_flow() {
@@ -104,7 +107,18 @@ async fn caddy_proxy_webrtc_signaling_flow() {
         body["pairing_token"].as_str().unwrap().to_string()
     };
 
-    // 2. 手机 POST offer。
+    // 2. 桌面订阅 SSE（query token，与 signaling.ts 一致）。保持连接打开
+    //    直到 answer 回填完成——订阅存在是 offer 被接受的前提。
+    let events = c
+        .get(format!(
+            "{CADDY_BASE}/api/devices/{device_id}/webrtc/events?token={token}"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(events.status(), 200);
+
+    // 3. 手机 POST offer（有活跃订阅 → 200 + session_id）。
     let session_id = {
         let resp = c
             .post(format!("{CADDY_BASE}/api/devices/{device_id}/webrtc/offer"))
@@ -115,11 +129,12 @@ async fn caddy_proxy_webrtc_signaling_flow() {
             .send()
             .await
             .unwrap();
+        assert_eq!(resp.status(), 200);
         let body: serde_json::Value = resp.json().await.unwrap();
         body["session_id"].as_str().unwrap().to_string()
     };
 
-    // 3. 桌面回填 answer。
+    // 4. 桌面回填 answer。
     let resp = c
         .post(format!(
             "{CADDY_BASE}/api/devices/{device_id}/webrtc/answer"
@@ -134,6 +149,9 @@ async fn caddy_proxy_webrtc_signaling_flow() {
         .await
         .unwrap();
     assert_eq!(resp.status(), 200);
+
+    // 关闭 SSE（drop 连接）。
+    drop(events);
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

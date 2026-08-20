@@ -10,6 +10,7 @@ export interface TranslationBundle {
   common: Record<string, unknown>;
   devices: Record<string, unknown>;
   errors: Record<string, unknown>;
+  landing: Record<string, unknown>;
   settings: Record<string, unknown>;
 }
 

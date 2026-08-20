@@ -171,6 +171,37 @@ function AppContent() {
     };
   }, []);
 
+  // 注入结果事件总线：后台队列异步注入完成后 push，前端 console 可观测
+  // （成功/失败 + 字符数 + 耗时；失败时配合 Rust 侧 warn! 定位根因）。
+  useEffect(() => {
+    let unCompleted: (() => void) | null = null;
+    let unFailed: (() => void) | null = null;
+    listen<{ client_id: string; success: boolean; chars: number; elapsed_ms: number }>(
+      'injection_completed',
+      (event) => {
+        console.debug('[injection] completed', event.payload);
+      }
+    )
+      .then((fn) => {
+        unCompleted = fn;
+      })
+      .catch((err) => console.error('[app] listen injection_completed failed', err));
+    listen<{ client_id: string; success: boolean; chars: number; elapsed_ms: number }>(
+      'injection_failed',
+      (event) => {
+        console.warn('[injection] failed', event.payload);
+      }
+    )
+      .then((fn) => {
+        unFailed = fn;
+      })
+      .catch((err) => console.error('[app] listen injection_failed failed', err));
+    return () => {
+      unCompleted?.();
+      unFailed?.();
+    };
+  }, []);
+
   return (
     <div className="relative flex min-h-screen flex-col">
       <LiquidBackground />

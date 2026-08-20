@@ -5,53 +5,53 @@ description: Visual language for DropVoice desktop (Tauri) and mobile (PWA) surf
 colors:
   # Primary — Teal. Used for primary actions, active device highlight, brand, connection success.
   # primary-600 (#0d9488) is the light-mode anchor; primary-500 (#14b8a6) the dark-mode anchor.
-  primary: "#0d9488"
-  primary-50: "#f0fdfa"
-  primary-100: "#ccfbf1"
-  primary-200: "#99f6e4"
-  primary-300: "#5eead4"
-  primary-400: "#2dd4bf"
-  primary-500: "#14b8a6"
-  primary-600: "#0d9488"
-  primary-700: "#0f766e"
-  primary-800: "#115e59"
-  primary-900: "#134e4a"
-  primary-950: "#042f2e"
+  primary: '#0d9488'
+  primary-50: '#f0fdfa'
+  primary-100: '#ccfbf1'
+  primary-200: '#99f6e4'
+  primary-300: '#5eead4'
+  primary-400: '#2dd4bf'
+  primary-500: '#14b8a6'
+  primary-600: '#0d9488'
+  primary-700: '#0f766e'
+  primary-800: '#115e59'
+  primary-900: '#134e4a'
+  primary-950: '#042f2e'
   # Accent — Orange. The single CTA accent; used sparingly for emphasis.
-  accent: "#f97316"
-  accent-50: "#fff7ed"
-  accent-100: "#ffedd5"
-  accent-200: "#fed7aa"
-  accent-300: "#fdba74"
-  accent-400: "#fb923c"
-  accent-500: "#f97316"
-  accent-600: "#ea580c"
-  accent-700: "#c2410c"
-  accent-800: "#9a3412"
-  accent-900: "#7c2d12"
-  accent-950: "#431407"
+  accent: '#f97316'
+  accent-50: '#fff7ed'
+  accent-100: '#ffedd5'
+  accent-200: '#fed7aa'
+  accent-300: '#fdba74'
+  accent-400: '#fb923c'
+  accent-500: '#f97316'
+  accent-600: '#ea580c'
+  accent-700: '#c2410c'
+  accent-800: '#9a3412'
+  accent-900: '#7c2d12'
+  accent-950: '#431407'
   # Neutral — backgrounds, surfaces, text. Pairs with light/dark themes.
-  neutral-0: "#ffffff"
-  neutral-50: "#f9fafb"
-  neutral-100: "#f3f4f6"
-  neutral-200: "#e5e7eb"
-  neutral-300: "#d1d5db"
-  neutral-400: "#9ca3af"
-  neutral-500: "#6b7280"
-  neutral-600: "#4b5563"
-  neutral-700: "#374151"
-  neutral-800: "#1f2937"
-  neutral-900: "#111827"
-  neutral-950: "#030712"
+  neutral-0: '#ffffff'
+  neutral-50: '#f9fafb'
+  neutral-100: '#f3f4f6'
+  neutral-200: '#e5e7eb'
+  neutral-300: '#d1d5db'
+  neutral-400: '#9ca3af'
+  neutral-500: '#6b7280'
+  neutral-600: '#4b5563'
+  neutral-700: '#374151'
+  neutral-800: '#1f2937'
+  neutral-900: '#111827'
+  neutral-950: '#030712'
   # Semantic
-  success-500: "#10b981"
-  success-600: "#059669"
-  warning-500: "#f59e0b"
-  warning-600: "#d97706"
-  danger-500: "#ef4444"
-  danger-600: "#dc2626"
-  info-500: "#0d9488"
-  info-600: "#0f766e"
+  success-500: '#10b981'
+  success-600: '#059669'
+  warning-500: '#f59e0b'
+  warning-600: '#d97706'
+  danger-500: '#ef4444'
+  danger-600: '#dc2626'
+  info-500: '#0d9488'
+  info-600: '#0f766e'
 typography:
   sans:
     fontFamily: Inter
@@ -86,35 +86,35 @@ components:
   # the DESIGN.md exporter cannot emit shadow or animation tokens.
   glass-card:
     backgroundColor: rgba(255, 255, 255, 0.8)
-    textColor: "{colors.neutral-900}"
-    rounded: "{rounded.2xl}"
+    textColor: '{colors.neutral-900}'
+    rounded: '{rounded.2xl}'
     padding: 16px
   glass-card-elevated:
     backgroundColor: rgba(255, 255, 255, 0.7)
-    textColor: "{colors.neutral-900}"
-    rounded: "{rounded.3xl}"
+    textColor: '{colors.neutral-900}'
+    rounded: '{rounded.3xl}'
     padding: 24px
   glass-pill:
     backgroundColor: rgba(255, 255, 255, 0.8)
-    textColor: "{colors.neutral-900}"
-    rounded: "{rounded.full}"
+    textColor: '{colors.neutral-900}'
+    rounded: '{rounded.full}'
     padding: 8px
   button-primary:
-    backgroundColor: "{colors.primary-600}"
-    textColor: "#ffffff"
-    rounded: "{rounded.lg}"
+    backgroundColor: '{colors.primary-600}'
+    textColor: '#ffffff'
+    rounded: '{rounded.lg}'
     height: 40px
     padding: 16px
   button-primary-hover:
-    backgroundColor: "{colors.primary-700}"
+    backgroundColor: '{colors.primary-700}'
   button-ghost:
     backgroundColor: transparent
-    textColor: "{colors.neutral-600}"
-    rounded: "{rounded.xl}"
+    textColor: '{colors.neutral-600}'
+    rounded: '{rounded.xl}'
   send-cta:
-    backgroundColor: "{colors.primary-600}"
-    textColor: "#ffffff"
-    rounded: "{rounded.full}"
+    backgroundColor: '{colors.primary-600}'
+    textColor: '#ffffff'
+    rounded: '{rounded.full}'
     size: 64px
 ---
 

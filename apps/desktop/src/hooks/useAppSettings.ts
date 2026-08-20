@@ -76,3 +76,16 @@ export function useSetInputDelay() {
     },
   });
 }
+
+/**
+ * 修改开机自启动。成功后刷新设置缓存（autostart 由后端实时持有）。
+ */
+export function useSetAutostart() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) => tauriInvoke.setAutostart(enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.settings });
+    },
+  });
+}

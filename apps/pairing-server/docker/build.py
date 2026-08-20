@@ -5,9 +5,13 @@ Builds a single unified image containing the Rust backend, Caddy reverse proxy,
 the mobile PWA (baked into /app/mobile-dist), and s6-overlay process manager.
 
 Supports load (local, single platform) and push (multi-platform to registry) modes.
-Always applies a 'main' tag (points at the latest main-branch build); additional
-tags can be specified via --tags (e.g. `git describe` output for immutable,
-promotable versions).
+Tags: `main` (always applied, first) plus any --tags extras, deduplicated —
+`main` points at whatever the current workspace last built. Version tags for
+releases are pushed by CI (.github/workflows/docker-publish.yml), not here.
+
+Cache: registry cache is deliberately not used — builds against the internal
+registry gain nothing from cross-machine cache layers and the cache blobs
+would just consume registry disk. The local buildx builder cache still applies.
 
 Environment requirements (not auto-resolved):
   - Docker daemon running
@@ -31,10 +35,11 @@ import sys
 
 IMAGE_NAME = "dropvoice/pairing-server"
 DEFAULT_REGISTRY = "192.168.5.50:5000"
-# Default: amd64 only. Multi-platform builds (e.g. arm64 for future hosting)
-# must be requested explicitly via --platform — the default must stay cheap.
+# Default: the host machine's platform only — local builds stay cheap and the
+# result is immediately `docker run`-able. Cross-platform (buildx + QEMU) must
+# be requested explicitly via --platform / --all-platforms; --push is required
+# for a true multi-arch manifest.
 ALL_PLATFORMS = ("linux/amd64", "linux/arm64")
-DEFAULT_PLATFORMS = ("linux/amd64",)
 
 PLATFORM_ALIASES = {
     "amd64": "linux/amd64",
@@ -95,7 +100,13 @@ def parse_args():
         "--platform",
         action="append",
         default=[],
-        help="Target platform (amd64 or arm64). Repeatable. Defaults to all platforms.",
+        help="Target platform (amd64 or arm64). Repeatable. "
+        "Defaults to the host machine's platform.",
+    )
+    parser.add_argument(
+        "--all-platforms",
+        action="store_true",
+        help=f"Build all supported platforms: {', '.join(ALL_PLATFORMS)}",
     )
     parser.add_argument(
         "--no-cache",
@@ -120,7 +131,9 @@ def env_error(msg, hint=None):
     sys.exit(2)
 
 
-def resolve_platforms(platform_args):
+def resolve_platforms(platform_args, all_platforms=False):
+    if all_platforms:
+        return list(ALL_PLATFORMS)
     resolved = []
     for p in platform_args:
         if p in PLATFORM_ALIASES:
@@ -133,7 +146,13 @@ def resolve_platforms(platform_args):
                 f"Supported platforms: {', '.join(PLATFORM_ALIASES.keys())}",
             )
     resolved = list(dict.fromkeys(resolved))
-    return resolved if resolved else list(DEFAULT_PLATFORMS)
+    # Default: the host machine's platform (cheap, immediately runnable).
+    return resolved if resolved else [detect_host_platform()]
+
+
+def resolve_tags(extra_tags):
+    """Default `main` tag plus user tags, deduplicated, main always first."""
+    return list(dict.fromkeys(["main", *extra_tags]))
 
 
 def detect_host_platform():
@@ -268,7 +287,7 @@ def main():
     args = parse_args()
     setup_logging(verbose=args.verbose)
 
-    target_platforms = resolve_platforms(args.platform)
+    target_platforms = resolve_platforms(args.platform, args.all_platforms)
 
     if args.push:
         platforms_to_build = target_platforms
@@ -307,7 +326,7 @@ def main():
     except (subprocess.CalledProcessError, FileNotFoundError):
         pass
 
-    all_tags = ["main"] + args.tags
+    all_tags = resolve_tags(args.tags)
     full_image_names = []
     cmd = ["docker", "buildx", "build"]
     for tag in all_tags:
@@ -323,13 +342,12 @@ def main():
 
     if args.push:
         cmd.append("--push")
-        cache_tag = f"{args.registry}/{IMAGE_NAME}:cache"
-        if not args.no_cache:
-            cmd.extend(["--cache-from", f"type=registry,ref={cache_tag}"])
-            cmd.extend(["--cache-to", f"type=registry,ref={cache_tag},mode=max"])
     else:
         cmd.append("--load")
 
+    # No registry cache on purpose: cross-machine cache layers add nothing for
+    # a single-builder LAN workflow and the cache tag bloats registry disk.
+    # The local buildx builder cache still applies (unless --no-cache).
     if args.no_cache:
         cmd.append("--no-cache")
 

@@ -5,18 +5,22 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import enCommon from '../locales/en/common.json';
 import enDevices from '../locales/en/devices.json';
 import enErrors from '../locales/en/errors.json';
+import enLanding from '../locales/en/landing.json';
 import enSettings from '../locales/en/settings.json';
 import jaCommon from '../locales/ja/common.json';
 import jaDevices from '../locales/ja/devices.json';
 import jaErrors from '../locales/ja/errors.json';
+import jaLanding from '../locales/ja/landing.json';
 import jaSettings from '../locales/ja/settings.json';
 import zhCommon from '../locales/zh/common.json';
 import zhDevices from '../locales/zh/devices.json';
 import zhErrors from '../locales/zh/errors.json';
+import zhLanding from '../locales/zh/landing.json';
 import zhSettings from '../locales/zh/settings.json';
 import zhTwCommon from '../locales/zh-TW/common.json';
 import zhTwDevices from '../locales/zh-TW/devices.json';
 import zhTwErrors from '../locales/zh-TW/errors.json';
+import zhTwLanding from '../locales/zh-TW/landing.json';
 import zhTwSettings from '../locales/zh-TW/settings.json';
 
 export const SUPPORTED_LANGUAGES = ['en', 'zh', 'zh-TW', 'ja'] as const;
@@ -29,29 +33,33 @@ export const resources = {
     common: enCommon,
     devices: enDevices,
     errors: enErrors,
+    landing: enLanding,
     settings: enSettings,
   },
   zh: {
     common: zhCommon,
     devices: zhDevices,
     errors: zhErrors,
+    landing: zhLanding,
     settings: zhSettings,
   },
   'zh-TW': {
     common: zhTwCommon,
     devices: zhTwDevices,
     errors: zhTwErrors,
+    landing: zhTwLanding,
     settings: zhTwSettings,
   },
   ja: {
     common: jaCommon,
     devices: jaDevices,
     errors: jaErrors,
+    landing: jaLanding,
     settings: jaSettings,
   },
 } as const;
 
-export const NAMESPACES = ['common', 'devices', 'errors', 'settings'] as const;
+export const NAMESPACES = ['common', 'devices', 'errors', 'landing', 'settings'] as const;
 export type Namespace = (typeof NAMESPACES)[number];
 
 export interface InitOptions {

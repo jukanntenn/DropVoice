@@ -7,6 +7,8 @@ dropvoice.bytehome.fun, future production) from the dev machine. Pure stdlib
 cannot see:
 
   1. /health  -> 200 + schema_version (migrations applied with this image)
+                + version == --expect-version (catches a healthy container
+                  still serving an OLD image; APP_VERSION is baked at build)
   2. PWA      -> index.html + service worker served (PWA baked into image)
   3. Round trip -> POST /api/devices (rate limit + DB + token issue)
                     -> PUT /api/devices/{id}/status with Bearer (auth + cache)
@@ -16,8 +18,9 @@ accumulate in dogfooding environments — acceptable, cleaned by the periodic
 offline marking.
 
 Usage:
-  python scripts/smoke.py https://dropvoice.bytehome.fun
-  python scripts/smoke.py https://localhost:4443 --insecure   # local acceptance
+  python scripts/smoke.py http://localhost:8080                # local acceptance (pnpm accept:up)
+  python scripts/smoke.py https://dropvoice.bytehome.fun       # staging
+  python scripts/smoke.py https://dropvoice.bytehome.fun --expect-version v0.3.0
 """
 
 import argparse
@@ -48,6 +51,12 @@ def main() -> int:
         help="skip TLS verification (local acceptance: self-signed certs)",
     )
     parser.add_argument("--name", default="smoke-test", help="device_name for the round trip")
+    parser.add_argument(
+        "--expect-version",
+        default="",
+        help="expected APP_VERSION (git describe) baked into the image; "
+        "mismatch means the deployment is healthy but stale",
+    )
     args = parser.parse_args()
 
     base = args.url.rstrip("/")
@@ -93,7 +102,12 @@ def main() -> int:
         assert status == 200, f"status={status}"
         assert body["status"] == "ok", f"status field={body!r}"
         assert body["schema_version"] > 0, f"schema_version={body.get('schema_version')!r}"
-        print(f"        schema_version={body['schema_version']}")
+        print(f"        schema_version={body['schema_version']} version={body.get('version')!r}")
+        if args.expect_version:
+            assert body.get("version") == args.expect_version, (
+                f"version={body.get('version')!r} but expected {args.expect_version!r} "
+                "(healthy but stale image?)"
+            )
         return True
 
     def pwa_index():

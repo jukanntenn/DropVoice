@@ -1,4 +1,5 @@
-use tauri::State;
+use tauri::{AppHandle, State};
+use tauri_plugin_autostart::ManagerExt;
 use tracing::info;
 
 use crate::commands::{AppState, Settings};
@@ -6,8 +7,10 @@ use crate::error::{AppError, AppResult};
 
 /// Returns the user-facing settings snapshot.
 #[tauri::command]
-pub async fn get_settings(state: State<'_, AppState>) -> AppResult<Settings> {
+pub async fn get_settings(app: AppHandle, state: State<'_, AppState>) -> AppResult<Settings> {
     let cfg = state.config.read().await;
+    // 开机自启动状态由 tauri-plugin-autostart 实时持有（注册表 / LaunchAgent）。
+    let autostart = app.autolaunch().is_enabled().unwrap_or(false);
     Ok(Settings {
         language: cfg.app.language.clone(),
         theme: cfg.app.theme.clone(),
@@ -15,7 +18,21 @@ pub async fn get_settings(state: State<'_, AppState>) -> AppResult<Settings> {
         port: cfg.server.port,
         max_text_length: cfg.injection.max_text_length,
         minimize_to_tray: cfg.window.minimize_to_tray,
+        autostart,
     })
+}
+
+/// 设置开机自启动（默认关闭；用户显式开启后写注册表 / LaunchAgent）。
+#[tauri::command]
+pub async fn set_autostart(app: AppHandle, enabled: bool) -> AppResult<()> {
+    let result = if enabled {
+        app.autolaunch().enable()
+    } else {
+        app.autolaunch().disable()
+    };
+    result.map_err(|e| AppError::Internal(format!("failed to set autostart: {e}")))?;
+    info!(enabled, "autostart updated");
+    Ok(())
 }
 
 /// Updates the UI language and persists the change.

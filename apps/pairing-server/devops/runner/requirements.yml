@@ -1,11 +1,11 @@
 # dropvoice ansible-runner — 集合版本锁定。
 #
-# 仅作可审计的版本来源。实际安装在 Dockerfile 构建时由
-# `ansible-galaxy collection install` 完成（见 Dockerfile）。改版本时同步
-# 修改 Dockerfile 里的 pin 值，然后重新 docker build。
+# 单一真源：Dockerfile 构建时经 `ansible-galaxy collection install -r
+# requirements.yml` 安装本文件；ansible-core 版本 pin 在 Dockerfile
+# （community.docker 5.2.1 要求 ansible-core >=2.17，pin 的 2.18.* 满足）。
+# 改版本时修改本文件 / Dockerfile，然后重新 docker build。
 
 collections:
   - name: community.docker
     # deploy.yml 用到 community.docker.docker_compose_v2 模块。
-    # 5.2.1 要求 ansible-core >=2.17，Dockerfile pin 2.18.* 满足。
     version: "==5.2.1"

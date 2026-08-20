@@ -94,10 +94,8 @@ async fn register_with_backoff(
     loop {
         let (base_url, device_id, device_name, port) = {
             let cfg = config.read().await;
-            let base_url = std::env::var("PAIRING_SERVER_URL")
-                .unwrap_or_else(|_| pairing_client::DEFAULT_PAIRING_SERVER_URL.to_string());
             (
-                base_url,
+                pairing_client::resolve_base_url(&cfg.network.pairing_server_url),
                 cfg.device.device_id.clone(),
                 cfg.device.device_name.clone(),
                 cfg.server.port,
@@ -175,10 +173,8 @@ async fn heartbeat_loop(
 
         let (base_url, device_id, device_name, port) = {
             let cfg = config.read().await;
-            let base_url = std::env::var("PAIRING_SERVER_URL")
-                .unwrap_or_else(|_| pairing_client::DEFAULT_PAIRING_SERVER_URL.to_string());
             (
-                base_url,
+                pairing_client::resolve_base_url(&cfg.network.pairing_server_url),
                 cfg.device.device_id.clone(),
                 cfg.device.device_name.clone(),
                 cfg.server.port,

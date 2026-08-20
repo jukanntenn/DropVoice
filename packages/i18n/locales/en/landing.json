@@ -1,0 +1,98 @@
+{
+  "nav": {
+    "how": "How it works",
+    "selfHost": "Self-host",
+    "faq": "FAQ",
+    "download": "Download"
+  },
+  "hero": {
+    "title1": "Speak on your phone.",
+    "title2": "Type on your PC.",
+    "sub1": "Your words appear at the PC cursor as you speak.",
+    "sub2": "No IME to install. No cloud.",
+    "downloadCta": "Download the desktop app",
+    "mobileCta": "Use on your phone",
+    "qrCaption": "Scan to open on your phone — no install",
+    "platformLine": "Windows · macOS · Linux · Free & open source"
+  },
+  "demo": {
+    "phone": "Phone",
+    "pc": "PC",
+    "injectHint": "Text lands wherever your cursor is"
+  },
+  "facts": {
+    "oss": "MIT open source",
+    "stack": "Tauri · WebRTC · P2P"
+  },
+  "how": {
+    "kicker": "01 · Get started",
+    "title": "Three steps, then just talk",
+    "s1t": "Install the desktop app",
+    "s1d": "It shows a pairing QR code",
+    "s2t": "Scan with your phone",
+    "s2d": "Opens the web app and pairs",
+    "s3t": "Speak",
+    "s3d": "Text lands wherever your cursor is",
+    "tabChat": "Chat",
+    "tabDoc": "Doc",
+    "tabTerm": "Terminal",
+    "chatText": "Dinner at 7?",
+    "docText": "Meeting notes: voice input test",
+    "termText": "$ git commit -m \"fix: …\""
+  },
+  "privacy": {
+    "kicker": "02 · Privacy",
+    "title": "Your words never touch anyone's server",
+    "p1": "Speech is recognized on your phone; DropVoice sends only text over a peer-to-peer WebRTC DataChannel — no cloud in between.",
+    "p2": "The public pairing server relays handshake signals only while connecting, and never sees your content.",
+    "note": "Traffic within your LAN is unencrypted — use trusted networks.",
+    "cloudLabel": "Cloud IMEs",
+    "cloudCaption": "Recognition and storage happen on someone else's server",
+    "p2pLabel": "DropVoice",
+    "p2pCaption": "Text goes P2P, never leaves your LAN",
+    "handshakeCaption": "The pairing server carries handshakes only",
+    "phone": "Phone",
+    "pc": "PC",
+    "cloud": "Cloud"
+  },
+  "devices": {
+    "kicker": "03 · Multi-device",
+    "title": "One phone, every PC you own",
+    "p1": "Pair each machine once; afterwards a single tap on its color dot switches where your words go.",
+    "switchHint": "Tap to switch the target (demo)",
+    "d1": "Workstation",
+    "d2": "Laptop",
+    "d3": "Home PC"
+  },
+  "selfhost": {
+    "kicker": "04 · Self-host",
+    "title": "Run the pairing server on your own machine",
+    "p1": "The whole rendezvous service is one container image. Prefer not to use the public server? It runs on yours in three commands.",
+    "p2": "Open source isn't a gesture — you can read every line.",
+    "copyOk": "Copied",
+    "fullSteps": "Full steps live in the repo's docker/ directory"
+  },
+  "faq": {
+    "title": "FAQ",
+    "q1": "How accurate is the recognition?",
+    "a1": "Recognition happens in your phone's own keyboard. DropVoice only carries the text — accuracy equals your phone's.",
+    "q2": "Is my voice uploaded anywhere?",
+    "a2": "No. Speech is converted to text on the phone and sent peer-to-peer; there is no server of ours it could reach — we don't have one.",
+    "q3": "Does it cost anything?",
+    "a3": "MIT licensed and free. No subscription, ever.",
+    "q4": "Which desktop systems are supported?",
+    "a4": "Windows, macOS and Linux installers; the phone side is a web app — scan and go.",
+    "q5": "Is there noticeable lag?",
+    "a5": "Text travels peer-to-peer over your LAN, typically appearing within tens of milliseconds — close to typing."
+  },
+  "final": {
+    "title": "Now, say something.",
+    "sub": "Install the desktop app, scan once. The rest is just talking.",
+    "scanCaption": "Scan to open on your phone"
+  },
+  "footer": {
+    "license": "License",
+    "selfHost": "Self-host",
+    "copyright": "© 2026 DropVoice Contributors"
+  }
+}

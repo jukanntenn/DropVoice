@@ -1,0 +1,62 @@
+# packages/ui — design-system primitives. Workspace mode runs these hooks
+# with cwd=packages/ui and strips the packages/ui/ prefix.
+# src/tokens/theme.css is GENERATED (pnpm design:sync from DESIGN.md): it is
+# exempt from every fixer here and guarded by the root design-sync drift gate.
+# Root builtins still cover these files.
+
+[[repos]]
+repo = "local"
+
+# ---- format group: mutating fixers ----
+[[repos.hooks]]
+id = "prettier"
+name = "prettier (ui)"
+language = "system"
+entry = "pnpm exec prettier --write"
+files = "\\.(ts|tsx|js|jsx|json|css|html)$"
+exclude = "^src/tokens/theme\\.css$"
+pass_filenames = true
+groups = ["format"]
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "oxlint-fix"
+name = "oxlint --fix (ui)"
+language = "system"
+entry = "pnpm exec oxlint --fix"
+files = "\\.(ts|tsx|js|jsx)$"
+pass_filenames = true
+groups = ["format"]
+stages = ["pre-commit"]
+
+# ---- lint group: read-only gates ----
+[[repos.hooks]]
+id = "oxlint"
+name = "oxlint (ui)"
+language = "system"
+entry = "pnpm exec oxlint"
+files = "\\.(ts|tsx|js|jsx)$"
+pass_filenames = true
+groups = ["lint"]
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "typecheck"
+name = "tsc --noEmit (ui)"
+language = "system"
+entry = "pnpm typecheck"
+files = "\\.(ts|tsx)$"
+pass_filenames = false
+groups = ["lint"]
+stages = ["pre-commit"]
+
+# ---- check group: tests (pre-push) ----
+[[repos.hooks]]
+id = "vitest"
+name = "vitest (ui)"
+language = "system"
+entry = "pnpm test"
+files = "\\.(ts|tsx)$"
+pass_filenames = false
+groups = ["check"]
+stages = ["pre-push"]

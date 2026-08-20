@@ -4,9 +4,14 @@ import { useTranslation } from 'react-i18next';
 
 import { changeLanguage, LANGUAGE_OPTIONS, type SupportedLanguage } from '@dropvoice/i18n';
 import { themeAtom, type Theme } from '@dropvoice/core';
-import { Button, Dialog, Input, Select, useErrorHandler } from '@dropvoice/ui';
+import { Button, Dialog, Input, Select, Switch, useErrorHandler } from '@dropvoice/ui';
 
-import { useSetInputDelay, useSetLanguage, useSetTheme } from '../hooks/useAppSettings';
+import {
+  useSetAutostart,
+  useSetInputDelay,
+  useSetLanguage,
+  useSetTheme,
+} from '../hooks/useAppSettings';
 import type { Settings } from '../lib/invoke';
 
 interface SettingsDialogProps {
@@ -28,6 +33,7 @@ export function SettingsDialog({ open, onClose, settings }: SettingsDialogProps)
   const setLanguageMutation = useSetLanguage();
   const setThemeMutation = useSetTheme();
   const setInputDelayMutation = useSetInputDelay();
+  const setAutostartMutation = useSetAutostart();
   const [delayValue, setDelayValue] = useState('');
 
   // 设置加载后同步本地延迟输入框。
@@ -60,6 +66,10 @@ export function SettingsDialog({ open, onClose, settings }: SettingsDialogProps)
     const num = Number(delayValue);
     if (Number.isNaN(num) || num < 0 || num > 5000) return;
     setInputDelayMutation.mutate(num, { onError: (error) => handleError(error) });
+  };
+
+  const handleAutostartChange = (nextEnabled: boolean) => {
+    setAutostartMutation.mutate(nextEnabled, { onError: (error) => handleError(error) });
   };
 
   return (
@@ -102,6 +112,18 @@ export function SettingsDialog({ open, onClose, settings }: SettingsDialogProps)
             value={delayValue}
             onChange={(e) => setDelayValue(e.target.value)}
             onBlur={handleDelayBlur}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium" htmlFor="settings-autostart">
+              {t('settings:autoStart')}
+            </label>
+          </div>
+          <Switch
+            id="settings-autostart"
+            checked={settings?.autostart ?? false}
+            onCheckedChange={handleAutostartChange}
           />
         </div>
       </div>

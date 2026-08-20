@@ -40,6 +40,7 @@ toml = "0.8"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }
+tracing-log = { workspace = true }
 local-ip-address = { workspace = true }
 # 迁移自 `dirs`：与 pairing-server 统一使用 `directories` crate（workspace 已声明），
 # 避免同一 workspace 维护两个功能重叠的路径解析 crate。
@@ -52,7 +53,7 @@ reqwest = { workspace = true }
 base64 = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_System_ProcessStatus", "Win32_System_Threading"] }
+windows-sys = { version = "0.59", features = ["Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_Foundation", "Win32_UI_Input_KeyboardAndMouse"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

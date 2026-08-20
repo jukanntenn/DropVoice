@@ -13,20 +13,23 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Default pairing server base URL (webrtc-scan-direct-design §10.4).
-/// The pairing server and the mobile PWA share one origin — `dropvoice.bytehome.fun`
-/// (Caddy serves both). Overridable at runtime via the `PAIRING_SERVER_URL`
-/// environment variable.
-pub const DEFAULT_PAIRING_SERVER_URL: &str = "https://dropvoice.bytehome.fun";
+/// 解析信令服务器 base URL —— 桌面端唯一入口（heartbeat 与 webview 的
+/// `get_signaling_url` 命令共用）。
+///
+/// 优先级：env `PAIRING_SERVER_URL`（开发编排专用，.vscode/tasks.json 内置，
+/// 打包应用不设）→ 配置文件 `network.pairing_server_url`（默认
+/// [`crate::config::DEFAULT_PAIRING_SERVER_URL`]，PWA 与 API 同源，§10.4）。
+pub fn resolve_base_url(config_url: &str) -> String {
+    std::env::var("PAIRING_SERVER_URL").unwrap_or_else(|_| config_url.to_string())
+}
 
 /// Timeout for individual HTTP requests (spec 11 §4 `SIGNALING_TIMEOUT` 3s).
 const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// Build the shared HTTP client.
 ///
-/// `PAIRING_SERVER_INSECURE=1` skips TLS certificate verification — required
-/// only for local acceptance against the self-signed acceptance container
-/// (https://<lan-ip>:4443). Never set in production.
+/// `PAIRING_SERVER_INSECURE=1` skips TLS certificate verification — reserved
+/// for self-signed TLS deployments. Never set in production.
 fn build_client() -> Result<reqwest::Client, reqwest::Error> {
     let mut builder = reqwest::Client::builder().timeout(REQUEST_TIMEOUT);
     let insecure = std::env::var("PAIRING_SERVER_INSECURE")
@@ -180,6 +183,16 @@ pub async fn report_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// env 是进程全局且测试并发，无法安全 unset；两种外部状态下的结果都合法。
+    #[test]
+    fn resolve_base_url_env_wins_over_config_value() {
+        let resolved = resolve_base_url("http://configured.example");
+        match std::env::var("PAIRING_SERVER_URL") {
+            Ok(v) => assert_eq!(resolved, v),
+            Err(_) => assert_eq!(resolved, "http://configured.example"),
+        }
+    }
 
     #[test]
     fn register_request_serializes_correctly() {

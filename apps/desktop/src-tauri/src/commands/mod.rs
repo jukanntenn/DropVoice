@@ -26,6 +26,15 @@ pub struct ClientEvent {
     pub client_id: String,
 }
 
+/// `injection_completed` / `injection_failed` 事件载荷：注入结果（后台任务异步完成）。
+#[derive(Clone, Serialize)]
+pub struct InjectionResultPayload {
+    pub client_id: String,
+    pub success: bool,
+    pub chars: u64,
+    pub elapsed_ms: f64,
+}
+
 /// start_server / get_connection_info 返回的连接信息。
 #[derive(Debug, Clone, Serialize)]
 pub struct ConnectionInfo {
@@ -61,11 +70,13 @@ pub struct Settings {
     pub port: u16,
     pub max_text_length: usize,
     pub minimize_to_tray: bool,
+    /// 开机自启动（tauri-plugin-autostart，is_enabled 实时读取）。
+    pub autostart: bool,
 }
 
 /// Tauri 命令间共享的可变运行时状态。
 pub struct AppState {
-    /// 已加载的配置，同时持久化到 dropvoice.toml。
+    /// 已加载的配置，同时持久化到 config.toml。
     pub config: Arc<RwLock<DropVoiceConfig>>,
     /// 资源目录（保留兼容，WebRTC 主路径不再需要静态文件）。
     #[allow(dead_code)]

@@ -71,6 +71,13 @@ pub fn init_logging() -> LogGuard {
         eprintln!("tracing subscriber already initialised: {e}");
     }
 
+    // log→tracing 桥：enigo 等第三方 crate 用 `log` crate 输出的 warning
+    // （如 "Unable to enter the key as a virtual key. Falling back..."）因此
+    // 会浮现到终端与轮转日志，而非静默丢失（PRINCIPLES: degrade gracefully）。
+    if tracing_log::LogTracer::init().is_err() {
+        eprintln!("log tracer already initialised (log records will not be bridged)");
+    }
+
     LogGuard {
         _file_guard: file_guard,
     }

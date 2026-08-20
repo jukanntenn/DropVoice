@@ -17,13 +17,7 @@ import type {
   TransportEventHandler,
 } from '@dropvoice/core';
 
-/** 信令服务器 API 基础 URL。 */
-function apiBaseUrl(): string {
-  // dev: Vite proxy /api → http://localhost:38424，PWA 同源。
-  // prod: VITE_API_BASE_URL 注入（同域 https://dropvoice.bytehome.fun）。
-  const env = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  return env && env.length > 0 ? env : '';
-}
+import { getClientId } from './storage';
 
 /** 长轮询 hold 时长（§4.1 30s）。 */
 const LONG_POLL_TIMEOUT = 30_000;
@@ -133,7 +127,6 @@ export class RtcTransport implements TransportAdapter {
 
     // 解析 device.id（device_id 从 QR 载荷提取，见 AddDeviceModal）。
     const deviceId = this.device.id;
-    const baseUrl = apiBaseUrl();
 
     // §5.5 空 iceServers。
     const pc = new RTCPeerConnection({ iceServers: [], iceCandidatePoolSize: 1 });
@@ -174,7 +167,9 @@ export class RtcTransport implements TransportAdapter {
       body.token = this.auth.token;
     }
 
-    const offerResp = await fetch(`${baseUrl}/api/devices/${deviceId}/webrtc/offer`, {
+    // PWA 与 API 恒同源：dev 走 Vite proxy（/api → :38424），部署形态 Caddy
+    // 同机反代——请求始终用相对路径。
+    const offerResp = await fetch(`/api/devices/${deviceId}/webrtc/offer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -228,12 +223,11 @@ export class RtcTransport implements TransportAdapter {
     sessionId: string
   ): Promise<AnswerResponseBody | null> {
     this.pollAbort = new AbortController();
-    const baseUrl = apiBaseUrl();
     const deadline = Date.now() + LONG_POLL_TIMEOUT;
 
     while (Date.now() < deadline) {
       try {
-        const resp = await fetch(`${baseUrl}/api/devices/${deviceId}/webrtc/answer/${sessionId}`, {
+        const resp = await fetch(`/api/devices/${deviceId}/webrtc/answer/${sessionId}`, {
           signal: this.pollAbort.signal,
         });
         if (resp.status === 204) {
@@ -296,6 +290,13 @@ export class RtcTransport implements TransportAdapter {
   /** 绑定 DataChannel 事件。 */
   private wireChannel(channel: RTCDataChannel): void {
     channel.addEventListener('open', () => {
+      // §客户端身份：DataChannel 打开后立即上报本机稳定 clientId，桌面据此
+      // 以"设备"而非"会话"计数（断连重连不虚增活跃设备数）。
+      try {
+        channel.send(JSON.stringify({ type: 'hello', clientId: getClientId() }));
+      } catch (err) {
+        console.error('[rtc] hello send failed', err);
+      }
       this.emit('open');
     });
 

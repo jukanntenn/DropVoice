@@ -5,11 +5,14 @@ use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
-use crate::commands::{AppState, ClientEvent, ClientInfo, ConnectionInfo, PairingCodePayload};
+use crate::commands::{
+    AppState, ClientEvent, ClientInfo, ConnectionInfo, InjectionResultPayload, PairingCodePayload,
+};
 use crate::config::{DeviceConfig, DropVoiceConfig};
-use crate::connection::{ConnectionState, CredentialKind, PairingCode};
+use crate::connection::{ConnectionState, CredentialKind, InjectionResultCallback, PairingCode};
 use crate::error::{AppError, AppResult};
 use crate::network::heartbeat;
+use crate::network::pairing_client;
 use crate::text::validate_text;
 
 /// 启动连接服务（webrtc-scan-direct-design §5）。
@@ -32,11 +35,31 @@ pub async fn start_server(app: AppHandle, state: State<'_, AppState>) -> AppResu
     let cs = ConnectionState::new(config_snapshot);
     cs.mark_started().await;
 
-    // 启动注入队列处理任务。
+    // 启动注入队列处理任务。on_result 回调把注入结果推送到前端事件总线
+    // （injection_completed / injection_failed），供 webview console 观测与
+    // 未来 UI 提示；ConnectionManager 本身保持与 Tauri 解耦。
     let delay_ms = state.config.read().await.injection.delay_ms;
     let cm = cs.connection_manager.clone();
     let metrics = cs.metrics.clone();
-    cm.start_processing_task(delay_ms, metrics);
+    let app_for_events = app.clone();
+    let on_result: Arc<InjectionResultCallback> =
+        Arc::new(move |client_id, success, chars, elapsed_ms| {
+            let payload = InjectionResultPayload {
+                client_id: client_id.to_string(),
+                success,
+                chars,
+                elapsed_ms,
+            };
+            let event = if success {
+                "injection_completed"
+            } else {
+                "injection_failed"
+            };
+            if let Err(e) = app_for_events.emit(event, payload) {
+                warn!(error = %e, "failed to emit {event} event");
+            }
+        });
+    cm.start_processing_task(delay_ms, metrics, Some(on_result));
 
     // 签发配对码（§3.2，6 位数字）。
     let pairing_code = cs.issue_pairing_code().await;
@@ -190,7 +213,8 @@ pub async fn inject_text(
     client_id: String,
     state: State<'_, AppState>,
 ) -> AppResult<()> {
-    validate_text(&text)?;
+    let max_text_length = state.config.read().await.injection.max_text_length;
+    validate_text(&text, max_text_length)?;
     let guard = state.connection_state.lock().await;
     let cs = guard.as_ref().ok_or(AppError::ServerStartFailed {
         reason: "connection service not running".into(),
@@ -313,6 +337,19 @@ pub async fn unregister_client(client_id: String, state: State<'_, AppState>) ->
 pub async fn get_pairing_token(state: State<'_, AppState>) -> AppResult<Option<String>> {
     let cfg = state.config.read().await;
     Ok(cfg.device.pairing_token.clone())
+}
+
+/// 返回解析后的信令服务器 base URL（webview JS 的 SSE / answer POST 用，§5.1）。
+///
+/// URL 真源在 Rust（env `PAIRING_SERVER_URL` 开发编排覆盖 → 配置
+/// `network.pairing_server_url`），webview 构建时不再注入任何 URL ——
+/// Rust 心跳与 webview SSE 因此永远指向同一台服务器。
+#[tauri::command]
+pub async fn get_signaling_url(state: State<'_, AppState>) -> AppResult<String> {
+    let cfg = state.config.read().await;
+    Ok(pairing_client::resolve_base_url(
+        &cfg.network.pairing_server_url,
+    ))
 }
 
 /// 构建 QR 载荷（§6.5：dropvoice://pair?code=&device=&name=）。

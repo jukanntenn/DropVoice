@@ -1,32 +1,27 @@
 # Codex CLI configuration.
 # Docs: https://learn.chatgpt.com/docs/config-file/config-reference
+# Hooks are thin adapters over prek (see prek.toml at the repo root):
+#   PostToolUse -> prek run --group format --files <edited>
+#   Stop        -> prek run --group lint --all-files (block on failure)
 
 [features]
 hooks = true
 
-# --- PreToolUse: protect generated files ---
-[[hooks.PreToolUse]]
-matcher = "Edit|Write|ApplyPatch"
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "python3 .codex/hooks/protect_generated_files.py"
-command_windows = "python .codex/hooks/protect_generated_files.py"
-
-# --- PostToolUse: auto-format after edits ---
+# --- PostToolUse: format the edited file via prek ---
 [[hooks.PostToolUse]]
 matcher = "Edit|Write|ApplyPatch"
 
 [[hooks.PostToolUse.hooks]]
 type = "command"
-command = "python3 .codex/hooks/format_on_edit.py"
-command_windows = "python .codex/hooks/format_on_edit.py"
+command = "python3 .codex/hooks/post_tool_use.py"
+command_windows = "python .codex/hooks/post_tool_use.py"
+timeout = 120
 
-# --- Stop: lint before ending ---
+# --- Stop: lint all files via prek before ending ---
 [[hooks.Stop]]
 
 [[hooks.Stop.hooks]]
 type = "command"
-command = "python3 .codex/hooks/lint_on_stop.py"
-command_windows = "python .codex/hooks/lint_on_stop.py"
+command = "python3 .codex/hooks/stop.py"
+command_windows = "python .codex/hooks/stop.py"
 timeout = 240

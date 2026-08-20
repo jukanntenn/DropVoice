@@ -10,7 +10,7 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter } from 'k6/metrics';
 
-const BASE = __ENV.BASE_URL || 'https://localhost:4443';
+const BASE = __ENV.BASE_URL || 'http://localhost:8080';
 const SCENE = __ENV.SCENE || 'register'; // register | heartbeat | mixed
 
 // 自定义指标：201（新建）vs 200（复用）

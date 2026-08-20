@@ -2,21 +2,36 @@
 //!
 //! 常量是权威来源。运行时配置按优先级加载（低→高）：
 //! 1. 内置默认值（`Config::default()`）
-//! 2. 容器内固定路径 `/app/config.toml`（可选；docker-compose.local 挂载
-//!    `config.local.toml` 到此路径，字段缺失时回落默认值）
+//! 2. TOML 文件（可选；探测顺序见 [`CONFIG_PATHS`]）：
+//!    - 容器内 `/app/config.toml`（docker compose 挂载点：验收挂
+//!      `docker/config.acceptance.toml`，自部署挂 `docker/config.toml`
+//!      （模板 `docker/config.example.toml`），staging/prod 挂 ansible
+//!      渲染的 `config.toml.j2`）
+//!    - 开发裸跑（cargo run）`apps/pairing-server/config.local.toml`
+//!      （gitignored；模板 `config.local.toml.example`）
 //! 3. 环境变量覆盖（`LISTEN_ADDR` / `DATABASE_URL` / `RATE_LIMIT_PER_SEC` /
-//!    `ENABLE_DOCS` / `CORS_ORIGINS`）——仅当需要临时覆盖时使用
+//!    `CORS_ORIGINS`）——仅临时覆盖的逃生舱，常态不用
 //!
-//! 生产 / staging 由 docker-compose 提供，目前仍走 env（`Config::load()`
-//! 自动兼容；将来可整体切换为 TOML）。
+//! 调试类开关只走 env、不入 TOML（与 RUST_LOG / LOG_DIR 同类，模板间因此
+//! 无 docs 差异）：`ENABLE_DOCS`（Swagger UI，默认关）。
+//!
+//! 配置文件存在但读取/解析失败时**启动即失败**（返回 Err）——静默回落
+//! 默认值会让限流/CORS/数据库路径悄然漂移，排查成本远高于一次明确的启动失败。
 use std::env;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-/// 容器内默认配置文件路径（docker-compose.local 挂载于此）。
-/// 裸跑（cargo run）时该路径不存在，自动跳过。
-const DEFAULT_CONFIG_PATH: &str = "/app/config.toml";
+/// 配置文件探测路径（按序取第一个**存在**的；都不存在则用内置默认值）。
+///
+/// 容器路径在前（部署形态的权威挂载点）；dev 路径是编译期绝对路径，
+/// 容器构建时该路径在运行时镜像中不存在，探测自然跳过。
+fn config_paths() -> [PathBuf; 2] {
+    [
+        PathBuf::from("/app/config.toml"),
+        PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/config.local.toml")),
+    ]
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // 时间常量（SCREAMING_SNAKE_CASE）
@@ -81,38 +96,49 @@ pub struct Config {
     pub database_url: String,
     /// 速率限制（每 IP 每秒请求数）。
     pub rate_limit_per_sec: u32,
-    /// 是否挂载 /docs Swagger UI 交互文档。默认关闭（生产经 Caddy 反代时不暴露公网）。
-    pub enable_docs: bool,
     /// CORS 允许的 origin 列表（§10.5：桌面 webview 跨端口直连）。
     /// 空列表表示不启用 CORS（prod 同域部署不触发）。TOML 用数组，
     /// env `CORS_ORIGINS` 用逗号分隔字符串。
     pub cors_origins: Vec<String>,
 }
 
+/// 是否挂载 /docs Swagger UI（仅 env `ENABLE_DOCS=1|true`，默认关闭）。
+///
+/// 调试开关与 RUST_LOG 同类，不入 TOML——各环境模板间不再有 docs 差异。
+pub fn enable_docs() -> bool {
+    env::var("ENABLE_DOCS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 impl Config {
-    /// 按优先级加载配置：内置默认值 → `/app/config.local.toml`（可选）→ env 覆盖。
+    /// 按优先级加载配置：内置默认值 → TOML 文件（探测见 [`config_paths`]）→ env 覆盖。
     ///
     /// TOML 中缺失的字段回落内置默认值；env 仅当变量**存在**时覆盖（与
     /// "配置尽量放文件、env 只在非常必要时覆盖"的约定一致）。
-    pub fn load() -> Self {
+    /// TOML 文件存在但读取/解析失败 → Err（启动即失败，见模块文档）。
+    pub fn load() -> Result<Self, String> {
         let mut cfg = Config::default();
 
-        let path = PathBuf::from(DEFAULT_CONFIG_PATH);
-        if path.exists() {
-            match std::fs::read_to_string(&path).and_then(|text| {
-                toml::from_str::<Config>(&text)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-            }) {
-                Ok(file_cfg) => {
-                    tracing::info!(path = %path.display(), "config loaded from toml");
-                    cfg = file_cfg;
-                }
-                Err(e) => tracing::warn!(
-                    error = %e,
-                    path = %path.display(),
-                    "invalid config toml, falling back to defaults"
-                ),
-            }
+        let existing = config_paths().into_iter().find(|p| p.exists());
+        if let Some(path) = existing {
+            let text = std::fs::read_to_string(&path).map_err(|e| {
+                format!(
+                    "failed to read config {}: {e} (mounted a missing file? docker would have \
+                     created a directory — copy the example first, e.g. \
+                     `cp config.local.toml.example config.local.toml`)",
+                    path.display()
+                )
+            })?;
+            let file_cfg: Config = toml::from_str(&text)
+                .map_err(|e| format!("invalid TOML in config {}: {e}", path.display()))?;
+            tracing::info!(path = %path.display(), "config loaded from toml");
+            cfg = file_cfg;
+        } else {
+            tracing::info!(
+                "no config file found (checked /app/config.toml and config.local.toml); \
+                 using built-in defaults"
+            );
         }
 
         if let Ok(v) = env::var("LISTEN_ADDR") {
@@ -122,12 +148,12 @@ impl Config {
             cfg.database_url = v;
         }
         if let Ok(v) = env::var("RATE_LIMIT_PER_SEC") {
-            if let Ok(n) = v.parse() {
-                cfg.rate_limit_per_sec = n;
+            match v.parse() {
+                Ok(n) => cfg.rate_limit_per_sec = n,
+                Err(_) => {
+                    tracing::warn!(value = %v, "invalid RATE_LIMIT_PER_SEC, keeping configured value")
+                }
             }
-        }
-        if let Ok(v) = env::var("ENABLE_DOCS") {
-            cfg.enable_docs = v == "1" || v.eq_ignore_ascii_case("true");
         }
         if let Ok(v) = env::var("CORS_ORIGINS") {
             cfg.cors_origins = if v.trim().is_empty() {
@@ -136,7 +162,7 @@ impl Config {
                 v.split(',').map(|o| o.trim().to_string()).collect()
             };
         }
-        cfg
+        Ok(cfg)
     }
 }
 
@@ -151,7 +177,6 @@ impl Default for Config {
                 format!("sqlite://{}?mode=rwc", p.display())
             },
             rate_limit_per_sec: RATE_LIMIT_PER_SEC,
-            enable_docs: false,
             cors_origins: Vec::new(),
         }
     }

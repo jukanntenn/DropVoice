@@ -22,6 +22,8 @@ apps/desktop/src-tauri/Cargo.lock
 .claude/
 .zcode/
 .agents/
+.codex/
+.opencode/
 
 # Local runtime data & logs
 logs/
@@ -30,6 +32,24 @@ logs/
 apps/pairing-server/data/
 apps/pairing-server/deploy/
 test-results/
+**/*.log
+apps/pairing-server/docker/log/
+apps/pairing-server/docker/data/
+apps/pairing-server/docker/__pycache__/
+
+# Environment files (never ship env content into the image or its build stage)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local scratch / experiments / reference repos (gitignored; ~8GB, must not enter context).
+# Kept AFTER the `!**/.env.example` negation so it re-excludes anything re-included from .local/.
+.local/
+
+# GUI test screenshots and Playwright artifacts
+gui-test-screenshots/
+e2e/test-results/
+e2e/playwright-report/
 
 # OS files
 **/.DS_Store
@@ -45,3 +65,14 @@ DESIGN.md
 # Docker artifacts themselves (avoid recursive context bloat)
 **/Dockerfile
 **/docker-compose*.yml
+
+# Large/generated files not needed for the pairing-server image
+assets/
+app-icon.png
+apps/desktop/src-tauri/app-icon.png
+apps/mobile/public/app-icon.png
+apps/desktop/src-tauri/gen/
+*.tsbuildinfo
+prek.toml
+**/prek.toml
+ansible.cfg

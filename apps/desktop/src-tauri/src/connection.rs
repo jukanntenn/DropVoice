@@ -19,18 +19,22 @@ use serde::Serialize;
 use tokio::sync::{Mutex as AsyncMutex, RwLock};
 use tracing::{info, warn};
 
-use crate::config::DropVoiceConfig;
+use crate::config::{ConnectionTokenRecord, DropVoiceConfig};
 use crate::error::{AppError, AppResult};
 use crate::server::auth;
 use crate::telemetry::BusinessMetrics;
-use crate::text::{EnigoInjector, Injector};
+use crate::text::{EnigoInjector, Injector, DEFAULT_MAX_TEXT_LENGTH};
 
 /// 配对码 + 其签发时间（用于 5min TTL 校验）。
 /// §6：pub 以便 `build_qr_payload`（命令路径与定时器路径共用）按引用读取当前码。
 pub type PairingCode = Option<(String, DateTime<Utc>)>;
 
-/// 连接令牌 FIFO 上限（§3.3，永不过期，上限 100 FIFO）。
+/// 连接令牌 FIFO 上限（§3.3，30 天 TTL，上限 100 FIFO）。
 const MAX_CONNECTION_TOKENS: usize = 100;
+
+/// 注入结果回调：`(client_id, success, chars, elapsed_ms)`。
+/// 由 `start_server` 注入事件发射器，保持 ConnectionManager 与 Tauri 解耦。
+pub type InjectionResultCallback = dyn Fn(&str, bool, u64, f64) + Send + Sync + 'static;
 
 /// 一个已连接的手机客户端（经 WebRTC DataChannel）。
 #[derive(Debug, Clone, Serialize)]
@@ -56,17 +60,24 @@ pub struct ConnectionManager {
     is_processing: Arc<AtomicBool>,
     max_connections: usize,
     max_queue_size: usize,
+    max_text_length: usize,
     injector: Arc<dyn Injector>,
 }
 
 impl ConnectionManager {
     pub fn new() -> Self {
-        Self::with_limits(usize::MAX, usize::MAX, Arc::new(EnigoInjector::new()))
+        Self::with_limits(
+            usize::MAX,
+            usize::MAX,
+            DEFAULT_MAX_TEXT_LENGTH,
+            Arc::new(EnigoInjector::new()),
+        )
     }
 
     pub fn with_limits(
         max_connections: usize,
         max_queue_size: usize,
+        max_text_length: usize,
         injector: Arc<dyn Injector>,
     ) -> Self {
         Self {
@@ -75,6 +86,7 @@ impl ConnectionManager {
             is_processing: Arc::new(AtomicBool::new(false)),
             max_connections,
             max_queue_size,
+            max_text_length,
             injector,
         }
     }
@@ -140,7 +152,15 @@ impl ConnectionManager {
     }
 
     /// 启动后台注入队列处理任务（服务运行期间常驻）。
-    pub fn start_processing_task(self: Arc<Self>, delay_ms: u64, metrics: Arc<BusinessMetrics>) {
+    ///
+    /// `on_result` 可选：每次注入完成/失败后回调 `(client_id, success, chars, elapsed_ms)`，
+    /// 供上层发射事件（ConnectionManager 本身不依赖 Tauri）。
+    pub fn start_processing_task(
+        self: Arc<Self>,
+        delay_ms: u64,
+        metrics: Arc<BusinessMetrics>,
+        on_result: Option<Arc<InjectionResultCallback>>,
+    ) {
         tokio::spawn(async move {
             info!("injection queue processor started");
             loop {
@@ -152,9 +172,12 @@ impl ConnectionManager {
                 if let Some(task) = task {
                     self.is_processing.store(true, Ordering::Relaxed);
                     let chars = task.text.chars().count() as u64;
+                    let newlines = task.text.chars().filter(|c| *c == '\n').count() as u64;
                     let start = std::time::Instant::now();
 
-                    let result: AppResult<()> = self.injector.inject(&task.text, delay_ms);
+                    let result: AppResult<()> =
+                        self.injector
+                            .inject(&task.text, delay_ms, self.max_text_length);
                     let elapsed_ms = start.elapsed().as_millis() as f64;
 
                     match &result {
@@ -163,6 +186,7 @@ impl ConnectionManager {
                             info!(
                                 client_id = %task.client_id,
                                 chars = chars,
+                                newlines = newlines,
                                 elapsed_ms = %elapsed_ms,
                                 "injection completed"
                             );
@@ -171,10 +195,17 @@ impl ConnectionManager {
                             metrics.record_injection(chars, elapsed_ms, false);
                             warn!(
                                 client_id = %task.client_id,
+                                chars = chars,
+                                newlines = newlines,
+                                elapsed_ms = %elapsed_ms,
                                 error = %e,
                                 "injection failed"
                             );
                         }
+                    }
+
+                    if let Some(cb) = &on_result {
+                        cb(&task.client_id, result.is_ok(), chars, elapsed_ms);
                     }
 
                     self.is_processing.store(false, Ordering::Relaxed);
@@ -197,8 +228,8 @@ pub struct ConnectionState {
     pub connection_manager: Arc<ConnectionManager>,
     /// 当前配对码 + 签发时间（§3.2）。
     pub pairing_code: Arc<RwLock<PairingCode>>,
-    /// 已签发的连接令牌（内存 + 持久化，§3.3）。
-    pub tokens: Arc<RwLock<Vec<String>>>,
+    /// 已签发的连接令牌（持久化 + 30 天 TTL，§3.3）。
+    pub tokens: Arc<RwLock<Vec<ConnectionTokenRecord>>>,
     pub config: Arc<RwLock<DropVoiceConfig>>,
     pub metrics: Arc<BusinessMetrics>,
     pub start_time: Arc<RwLock<Option<DateTime<Utc>>>>,
@@ -208,13 +239,15 @@ impl ConnectionState {
     pub fn new(config: DropVoiceConfig) -> Self {
         let max_connections = config.server.max_connections;
         let queue_size = config.injection.queue_size;
+        let max_text_length = config.injection.max_text_length;
         let metrics = Arc::new(BusinessMetrics::new());
         let connection_manager = Arc::new(ConnectionManager::with_limits(
             max_connections,
             queue_size,
+            max_text_length,
             Arc::new(EnigoInjector::new()),
         ));
-        // 加载持久化的连接令牌。
+        // 加载持久化的连接令牌（含签发时间；旧版字符串数组兼容见 config::deserialize_connected_tokens）。
         let tokens = config.device.connected_tokens.clone().unwrap_or_default();
         Self {
             connection_manager,
@@ -298,7 +331,7 @@ impl ConnectionState {
         }
         drop(code_guard);
 
-        // 2. 校验连接令牌（§3.3，内存比对）。
+        // 2. 校验连接令牌（§3.3，持久化 + 30 天 TTL）。
         let tokens = self.tokens.read().await;
         if auth::verify_connection_token(credential, &tokens) {
             return CredentialKind::Token;
@@ -307,11 +340,14 @@ impl ConnectionState {
         CredentialKind::Invalid
     }
 
-    /// 添加连接令牌并持久化（§3.3，上限 100 FIFO）。
+    /// 添加连接令牌（记录签发时间）并持久化（§3.3，30 天 TTL，上限 100 FIFO）。
     pub async fn add_connection_token(&self, token: String) {
         {
             let mut tokens = self.tokens.write().await;
-            tokens.push(token.clone());
+            tokens.push(ConnectionTokenRecord {
+                token,
+                issued_at: Utc::now(),
+            });
             if tokens.len() > MAX_CONNECTION_TOKENS {
                 let excess = tokens.len() - MAX_CONNECTION_TOKENS;
                 tokens.drain(0..excess);
@@ -371,6 +407,7 @@ mod tests {
         ConnectionManager::with_limits(
             max_connections,
             max_queue_size,
+            DEFAULT_MAX_TEXT_LENGTH,
             Arc::new(MockInjector::new()),
         )
     }

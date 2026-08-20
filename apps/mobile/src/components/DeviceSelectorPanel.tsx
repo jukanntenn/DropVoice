@@ -30,20 +30,29 @@ export function DeviceSelectorPanel({
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div className="flex flex-wrap items-center gap-2 py-2">
+    <div className="flex flex-wrap items-center gap-1.5 py-1.5">
       {devices.length > 0 && (
         <DeviceSelector devices={devices} activeDeviceId={activeDeviceId} onSelect={onSelect} />
       )}
-      <Button variant="outline" size="sm" onClick={onAddDevice} aria-label={t('devices:addDevice')}>
+      {/* Add 收敛为 28px 幽灵图标钮（aria-label 保持可读；有设备时与 chip 同高）。 */}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        onClick={onAddDevice}
+        aria-label={t('devices:addDevice')}
+        title={t('devices:addDevice')}
+        className="shrink-0 text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-slate-100"
+      >
         <Plus className="h-4 w-4" />
-        {t('common:actions.add')}
       </Button>
       {devices.length > 0 && (
         <div className="relative">
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             aria-label={t('devices:title')}
+            title={t('devices:title')}
+            className="shrink-0 text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-slate-100"
             onClick={() => setMenuOpen((open) => !open)}
           >
             <MoreVertical className="h-4 w-4" />

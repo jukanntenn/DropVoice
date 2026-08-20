@@ -8,6 +8,7 @@
 ## [未发布]
 
 ### 新增
+
 - 配对服务器（Axum + SQLite）实现 LAN 地址会合（spec 11）
 - 桌面端 device_id / device_name / pairing_token 配置字段（spec 14）
 - 桌面端 i18n 模块 + 系统托盘菜单国际化（spec 15）
@@ -18,6 +19,7 @@
 - 仓库根 README.md 快速开始文档
 
 ### 修复
+
 - `hasExhaustedRetries` 误用 `MAX_DEVICES` 改为 `MAX_RETRIES`（spec 02 §5）
 - `languageAtom` 默认值从 `'en'` 改为 `'zh'`（spec 02 §2.2）
 - `useErrorHandler` 透出 suggestion 到 toast（spec 04 §4.4）
@@ -26,6 +28,7 @@
 ## [0.2.0] - 2026-07-15
 
 ### 新增
+
 - 完整按规范重写为 monorepo 结构（apps/desktop + apps/mobile + packages/core、ui、i18n）
 - 多设备管理（最多 5 台，Chip 形式选择器，IP 哈希颜色生成）
 - 注入队列（多手机并发注入时先进先出）
@@ -40,6 +43,7 @@
 - CI/CD 流水线（质量检查 + 多平台发布）
 
 ### 变更
+
 - 升级到 React 19
 - 升级到 Tauri v2
 - UI 组件库迁移到 @base-ui/react
@@ -56,6 +60,7 @@
 ## [0.1.0] - 2026-06-01
 
 ### 新增
+
 - 初始版本发布
 - QR 码扫描连接
 - WebSocket 文本传输

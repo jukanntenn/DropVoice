@@ -1,96 +1,145 @@
-# prek pre-commit configuration.
+# prek configuration — workspace root.
 # Docs: https://prek.j178.dev/
-# Setup: run `prek install` once after cloning (installs pre-commit + commit-msg git hooks).
+#
+# prek discovers every prek.toml in the repo and runs them as one workspace;
+# each child config's hooks run with cwd at that directory and receive
+# project-relative paths:
+#   - apps/desktop/prek.toml             TS frontend (src/) + Tauri Rust (src-tauri/)
+#   - apps/mobile/prek.toml              TS PWA
+#   - apps/pairing-server/prek.toml      Rust + OpenAPI drift gate
+#   - packages/{core,i18n,ui}/prek.toml  TS packages
+# Root builtins below still cover the whole tree (children are not orphan).
+#
+# Single source of truth for the whole quality pipeline: AI post-edit hooks run
+# `prek run --group format --files <edited>`, AI Stop runs `prek run --group
+# lint --all-files`, commit runs the pre-commit stage, push runs the pre-push
+# stage (tests), CI runs `prek run --all-files` + `prek run --stage pre-push
+# --all-files`. No parallel formatter/lint definition exists outside prek.
+#
+# Hook groups (orthogonal to stages):
+#   format — mutating fixers, auto-fix wherever the tool supports it
+#   lint   — read-only gates (oxlint / tsc / clippy)
+#   check  — structural checks, generated-file drift, lockfile freshness, tests
+#
+# Install: prek install
 
-minimum_prek_version = "0.2.0"
-default_install_hook_types = ["pre-commit", "commit-msg"]
+minimum_prek_version = "0.4.0"
+default_install_hook_types = ["pre-commit", "pre-push", "commit-msg"]
 
-# --- Built-in fast hooks (Rust-native, no Python needed) ---
+# Generated/lock files whose bytes belong to a generator or a package manager:
+# every mutating hook must exempt them (a fixer diverging from raw generator
+# output would trip the drift gates below). The regex is inlined per hook
+# because prek does not support config-level variable interpolation.
+#   packages/ui/src/tokens/theme.css               <- pnpm design:sync (DESIGN.md)
+#   apps/pairing-server/docs/openapi.{json,yaml}   <- gen-openapi (utoipa)
+#   Cargo.lock / pnpm-lock.yaml                    <- package managers only
+
+# ---- check group: read-only builtin gates (whole tree) ----
 [[repos]]
 repo = "builtin"
 hooks = [
-  { id = "trailing-whitespace" },
-  { id = "end-of-file-fixer" },
-  { id = "check-yaml" },
-  { id = "check-json" },
-  { id = "check-toml" },
-  { id = "check-merge-conflict" },
-  { id = "check-added-large-files" },
-  { id = "detect-private-key" },
+  { id = "check-yaml", groups = ["check"], stages = ["pre-commit"] },
+  { id = "check-toml", groups = ["check"], stages = ["pre-commit"] },
+  { id = "check-json", groups = ["check"], stages = ["pre-commit"] },
+  { id = "check-merge-conflict", groups = ["check"], stages = ["pre-commit"] },
+  { id = "check-added-large-files", groups = ["check"], stages = ["pre-commit"] },
+  { id = "detect-private-key", groups = ["check"], stages = ["pre-commit"] },
 ]
 
-# --- Local hooks (project-specific tools) ---
-# [[repos]]
-# repo = "local"
+# ---- format group: builtin fixers (whole tree, generated files exempt) ----
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "trailing-whitespace", exclude = "^packages/ui/src/tokens/theme\\.css$|^apps/pairing-server/docs/openapi\\.(json|yaml)$|^Cargo\\.lock$|^pnpm-lock\\.yaml$", groups = ["format"], stages = ["pre-commit"] },
+  { id = "mixed-line-ending", args = ["--fix=lf"], exclude = "^packages/ui/src/tokens/theme\\.css$|^apps/pairing-server/docs/openapi\\.(json|yaml)$|^Cargo\\.lock$|^pnpm-lock\\.yaml$", groups = ["format"], stages = ["pre-commit"] },
+  { id = "end-of-file-fixer", exclude = "^packages/ui/src/tokens/theme\\.css$|^apps/pairing-server/docs/openapi\\.(json|yaml)$|^Cargo\\.lock$|^pnpm-lock\\.yaml$", groups = ["format"], stages = ["pre-commit"] },
+]
 
-# # Frontend lint
-# [[repos.hooks]]
-# id = "oxlint"
-# name = "oxlint"
-# entry = "pnpm oxlint"
-# language = "system"
-# types_or = ["javascript", "jsx", "ts", "tsx"]
-# pass_filenames = false
+# ---- GitHub Actions workflow lint ----
+[[repos]]
+repo = "https://github.com/rhysd/actionlint"
+rev = "v1.7.12"
+hooks = [{ id = "actionlint", groups = ["check"], stages = ["pre-commit"] }]
 
-# # Frontend format
-# [[repos.hooks]]
-# id = "prettier"
-# name = "Prettier"
-# entry = "pnpm prettier --write"
-# language = "system"
-# types_or = ["javascript", "jsx", "ts", "tsx", "json", "css"]
+[[repos]]
+repo = "local"
 
-# # Rust format - workspace root covers desktop + pairing-server
-# [[repos.hooks]]
-# id = "cargo-fmt"
-# name = "cargo fmt"
-# entry = "cargo fmt --"
-# language = "system"
-# types = ["rust"]
-# pass_filenames = true
+# ---- format group: repo-level formatters (apps/ and packages/ own their files) ----
+[[repos.hooks]]
+id = "prettier-root"
+name = "prettier (root, non-app files)"
+language = "system"
+entry = "pnpm exec prettier --write"
+files = "\\.(ts|tsx|js|jsx|json|css|md|ya?ml|html)$"
+exclude = "^(apps|packages)/|^(\\.agents|\\.claude|\\.codex|\\.opencode|\\.zcode)/|^packages/ui/src/tokens/theme\\.css$|^Cargo\\.lock$|^pnpm-lock\\.yaml$"
+pass_filenames = true
+groups = ["format"]
+stages = ["pre-commit"]
 
-# # Rust lint - workspace covers all crates
-# [[repos.hooks]]
-# id = "cargo-clippy"
-# name = "cargo clippy"
-# entry = "cargo clippy --workspace -- -D warnings"
-# language = "system"
-# types = ["rust"]
-# pass_filenames = false
+# ---- lint group: repo-level lint (e2e + scripts TS/JS) ----
+[[repos.hooks]]
+id = "oxlint-root"
+name = "oxlint (e2e + scripts)"
+language = "system"
+entry = "pnpm exec oxlint"
+files = "^(e2e|scripts)/.*\\.(ts|tsx|js|jsx)$"
+pass_filenames = true
+groups = ["lint"]
+stages = ["pre-commit"]
 
-# # Design system lint
-# [[repos.hooks]]
-# id = "design-md-lint"
-# name = "DESIGN.md lint"
-# entry = "npx @google/design.md lint DESIGN.md"
-# language = "system"
-# files = "^DESIGN\\.md$"
-# pass_filenames = false
+# ---- check group: generated-file + sync gates ----
 
-# # AGENTS.md / CLAUDE.md sync check
-# [[repos.hooks]]
-# id = "agents-claude-sync"
-# name = "AGENTS.md/CLAUDE.md sync"
-# entry = "python scripts/sync-agents.py"
-# language = "system"
-# files = "^(AGENTS|CLAUDE)\\.md$"
-# pass_filenames = false
+# AGENTS.md == CLAUDE.md (byte-for-byte); fix: cp AGENTS.md CLAUDE.md
+[[repos.hooks]]
+id = "agents-sync"
+name = "AI tool configs in sync"
+language = "system"
+entry = "python scripts/sync-agents.py"
+files = "^(AGENTS|CLAUDE)\\.md$"
+pass_filenames = false
+groups = ["check"]
+stages = ["pre-commit"]
 
-# # OpenAPI 文档漂移检测：pairing-server 代码/文档变更时，
-# # 校验 docs/openapi.{json,yaml} 与代码生成结果一致（tests/openapi.rs）。
-# # 不一致时运行 `cargo run -p dropvoice-pairing-server --bin gen-openapi` 重新生成。
-# [[repos.hooks]]
-# id = "openapi-drift"
-# name = "pairing-server OpenAPI spec drift"
-# entry = "cargo test -p dropvoice-pairing-server --test openapi"
-# language = "system"
-# files = "^apps/pairing-server/"
-# pass_filenames = false
+# DESIGN.md tokens -> packages/ui/src/tokens/theme.css; fix: pnpm design:sync
+[[repos.hooks]]
+id = "design-sync"
+name = "design tokens up to date"
+language = "system"
+entry = "python scripts/check_design_sync.py"
+files = "^DESIGN\\.md$"
+pass_filenames = false
+groups = ["check"]
+stages = ["pre-commit"]
 
-# # Commit message lint (commit-msg stage)
-# [[repos.hooks]]
-# id = "commitlint"
-# name = "commitlint"
-# entry = "pnpm commitlint --edit"
-# language = "system"
-# stages = ["commit-msg"]
+# DESIGN.md must itself lint clean.
+[[repos.hooks]]
+id = "design-lint"
+name = "DESIGN.md lint"
+language = "system"
+entry = "pnpm design:lint"
+files = "^DESIGN\\.md$"
+pass_filenames = false
+groups = ["check"]
+stages = ["pre-commit"]
+
+# Lock files must match their manifests; fix: pnpm install --lockfile-only,
+# then any cargo command refreshes Cargo.lock; commit both.
+[[repos.hooks]]
+id = "lockfiles-fresh"
+name = "lock files up to date"
+language = "system"
+entry = "python scripts/check_lockfiles.py"
+files = "(package\\.json|pnpm-workspace\\.yaml|Cargo\\.toml|Cargo\\.lock|pnpm-lock\\.yaml)$"
+pass_filenames = false
+groups = ["check"]
+stages = ["pre-commit"]
+
+# ---- commit-msg: Conventional Commits ----
+[[repos.hooks]]
+id = "commitlint"
+name = "commit message format"
+language = "system"
+entry = "pnpm commitlint --edit"
+pass_filenames = true
+groups = ["check"]
+stages = ["commit-msg"]

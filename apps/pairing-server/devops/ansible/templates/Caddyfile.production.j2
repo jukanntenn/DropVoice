@@ -1,5 +1,10 @@
 # {{ ansible_managed }}
-# dropvoice pairing-server Caddyfile (production).
+# dropvoice pairing-server Caddyfile (production, TLS form).
+#
+# Routing mirrors docker/Caddyfile (the HTTP single source, used by image
+# default / acceptance / staging); the deltas here are TLS-only: the :4443
+# address, the Origin CA cert, and Cloudflare trusted_proxies / CF-Connecting-IP
+# on the proxy handles. Change routing in docker/Caddyfile and mirror it here.
 #
 # Production form (webrtc-scan-direct-design §10.4): one origin serves both the
 # mobile PWA and the WebRTC signaling API (same-origin, no CORS for the phone).

@@ -1,38 +1,35 @@
 # DropVoice pairing-server — Docker Compose Quick Start (self-hosted, HTTP)
 #
-# 1. Copy .env.example to .env and edit the values
-# 2. docker compose up -d
-# 3. curl http://localhost:8080/health   # -> "ok"
+# 1. Copy the app config:   cp config.example.toml config.toml   (edit if needed)
+# 2. (Optional) host port:  cp .env.example .env                 (defaults are fine)
+# 3. docker compose up -d
+# 4. curl http://localhost:8080/health   # -> "ok"
 #
 # Topology (mirrors markpost's production mechanism, adapted for SQLite):
 #   - All services in ONE container: s6-overlay supervises Caddy (the only
 #     published port) + the Rust axum backend (loopback-only :38424).
 #   - The SQLite database lives in the dropvoice-data named volume at
 #     /app/data — visible only to this container, never published on the host.
-#     (markpost runs a sibling postgres over a Unix-socket volume; this
-#     project uses embedded SQLite, so the data volume plays the sibling's
-#     role with the same isolation semantics.)
 #   - Rolling JSON logs are bind-mounted to ./log for host visibility.
 #
-# Environment variables (optional):
-#   PAIRING_PORT   - Host port (default: 8080)
-#   RUST_LOG       - Log level (default: info)
-#   RATE_LIMIT_PER_SEC - Per-IP requests/sec (default: 1)
+# Application config (rate limit / docs / CORS) lives in ./config.toml
+# (template: config.example.toml), mounted at /app/config.toml — this compose
+# only keeps host-side concerns: PAIRING_PORT and RUST_LOG (see .env.example).
 
 services:
   dropvoice-pairing:
-    # Available tags: latest, v* (registry pushed via docker/build.py)
-    image: dropvoice/pairing-server:latest
+    # Public images on Docker Hub (CI publishes on every v* tag; `latest`
+    # tracks the newest stable release). Also on ghcr.io.
+    image: docker.io/jukanntenn/dropvoice-pairing-server:latest
     container_name: dropvoice-pairing
     ports:
       - "${PAIRING_PORT:-8080}:8080"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./config.toml:/app/config.toml:ro
       - ./log:/app/log
       - dropvoice-data:/app/data
     environment:
-      - LISTEN_ADDR=127.0.0.1:38424
-      - DATABASE_URL=sqlite:///app/data/pairing.db?mode=rwc
       - LOG_DIR=/app/log
       - RUST_LOG=${RUST_LOG:-info}
     healthcheck:

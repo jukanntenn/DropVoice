@@ -1,0 +1,5 @@
+# openapi docs are byte-compared by tests/openapi.rs against generator
+# output (always LF). Pin LF so a fresh Windows checkout (core.autocrlf=true)
+# does not turn them CRLF and permanently fail the drift gate.
+apps/pairing-server/docs/openapi.json text eol=lf
+apps/pairing-server/docs/openapi.yaml text eol=lf

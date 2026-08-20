@@ -319,7 +319,7 @@ paths:
       tags:
       - health
       summary: 存活探针
-      description: 部署用存活探针（Caddy/Cloudflare 健康检查）。返回服务状态与当前镜像期望的数据库 schema 版本。
+      description: 部署用存活探针（Caddy/Cloudflare 健康检查）。返回服务状态、构建版本（APP_VERSION，git describe）与当前镜像期望的数据库 schema 版本。
       operationId: getHealth
       responses:
         '200':
@@ -491,12 +491,16 @@ components:
       required:
       - status
       - schema_version
+      - version
       properties:
         status:
           type: string
         schema_version:
           type: integer
           format: int64
+        version:
+          type: string
+          description: 构建版本（镜像内 `APP_VERSION` = `git describe`；本地 dev 运行为 "dev"）。
     OfferRequest:
       type: object
       description: '`POST /webrtc/offer` 请求体。code（首次配对）或 token（重连）二选一。'

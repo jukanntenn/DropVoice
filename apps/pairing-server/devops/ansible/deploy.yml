@@ -43,11 +43,25 @@
         dest: "{{ compose_file }}"
         mode: "0644"
 
-    - name: Template Caddyfile
+    - name: Template config.toml (application config → /app/config.toml)
       ansible.builtin.template:
-        src: "{{ caddyfile_template }}"
+        src: config.toml.j2
+        dest: "{{ config_file }}"
+        mode: "0644"
+
+    - name: Copy Caddyfile (HTTP form, shared with image default + acceptance)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../docker/Caddyfile"
         dest: "{{ caddyfile }}"
         mode: "0644"
+      when: tls_profile == 'http'
+
+    - name: Template Caddyfile (TLS form, production only)
+      ansible.builtin.template:
+        src: Caddyfile.production.j2
+        dest: "{{ caddyfile }}"
+        mode: "0644"
+      when: tls_profile == 'origin'
 
     - name: Pull image (daemon-level, honors insecure-registries)
       community.docker.docker_image:
@@ -66,3 +80,42 @@
         pull: never
         state: present
         remove_orphans: true
+
+    # Post-deploy verification from the controller (not the container network):
+    # compose's healthcheck only proves the in-container probe passes; this
+    # also catches a broken published port, Caddy config, or edge path — and
+    # the version check catches a healthy container still running an old image
+    # (APP_VERSION is baked into the image at build time).
+    - name: Record expected version from the deploying checkout
+      ansible.builtin.command:
+        cmd: git describe --tags --always --dirty
+        chdir: "{{ playbook_dir }}/../../../../"
+      delegate_to: localhost
+      run_once: true
+      register: controller_version
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Expected version is the pinned image tag (--tag / pinned env)
+      ansible.builtin.set_fact:
+        smoke_expected_version: "v{{ image_tag | regex_replace('^v', '') }}"
+      when: not ansible_check_mode and image_tag is defined and image_tag != 'main'
+
+    - name: Expected version is the deploying checkout (rolling main)
+      ansible.builtin.set_fact:
+        smoke_expected_version: "{{ controller_version.stdout }}"
+      when: not ansible_check_mode and image_tag is defined and image_tag == 'main'
+
+    - name: Verify deployment health and version (smoke)
+      ansible.builtin.command:
+        cmd: >-
+          python3 {{ playbook_dir }}/../../../../scripts/smoke.py {{ public_url }}
+          --expect-version {{ smoke_expected_version | default('') }}
+      delegate_to: localhost
+      run_once: true
+      register: smoke_result
+      changed_when: false
+      until: smoke_result.rc == 0
+      retries: 6
+      delay: 10
+      when: not ansible_check_mode

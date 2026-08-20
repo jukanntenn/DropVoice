@@ -1,5 +1,12 @@
 name: Quality Checks
 
+# Single source of truth: every check CI runs is declared in prek (prek.toml +
+# apps/*/prek.toml + packages/*/prek.toml). CI just installs the toolchains
+# prek's hooks call (pnpm, rust, python) and runs prek — no parallel
+# lint/format definition exists here. The only direct-tool jobs are the
+# desktop Rust OS matrix (platform-specific coverage prek's ubuntu job cannot
+# subsume) and the Playwright e2e job (needs a browser install).
+
 on:
   pull_request:
     branches: [main]
@@ -27,40 +34,27 @@ jobs:
     name: Detect Changes
     runs-on: ubuntu-latest
     outputs:
-      frontend: ${{ steps.filter.outputs.frontend }}
       desktop: ${{ steps.filter.outputs.desktop }}
-      pairing: ${{ steps.filter.outputs.pairing }}
+      frontend: ${{ steps.filter.outputs.frontend }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@de90cc6fb66fc756703f280f72eb1f71e65ce00f
         id: filter
         with:
           filters: |
-            frontend:
-              - 'apps/desktop/src/**'
-              - 'apps/mobile/**'
-              - 'packages/**'
-              - 'e2e/**'
-              - '*.json'
-              - '*.ts'
-              - '.oxlintrc.json'
-              - '.prettierrc'
-              - 'tsconfig.base.json'
             desktop:
               - 'apps/desktop/src-tauri/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'rustfmt.toml'
-            pairing:
-              - 'apps/pairing-server/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'rustfmt.toml'
+            frontend:
+              - 'apps/desktop/src/**'
+              - 'apps/mobile/**'
+              - 'packages/**'
+              - 'e2e/**'
 
-  frontend:
-    name: Frontend
-    needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+  quality:
+    name: prek (format + lint + gates + tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,51 +65,34 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: TypeScript
-        run: pnpm typecheck
-      - name: Lint
-        run: pnpm lint
-      - name: Format
-        run: pnpm format:check
-      - name: Test
-        run: pnpm test:coverage
-      - name: DESIGN.md
-        run: pnpm design:lint
-
-  design-sync:
-    name: Design Sync
-    needs: changes
-    if: needs.changes.outputs.frontend == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          version: 11
-      - uses: actions/setup-node@v4
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
         with:
-          node-version: 22
-          cache: pnpm
+          workspaces: |
+            apps/desktop/src-tauri
+            apps/pairing-server
+      - uses: astral-sh/setup-uv@v5
       - run: pnpm install --frozen-lockfile
-      - name: Export DESIGN.md tokens
-        run: pnpm design:export:css
-      - name: Check sync
-        run: |
-          if [ -n "$(git diff packages/ui/src/tokens/theme.css)" ]; then
-            echo "::error::DESIGN.md tokens out of sync. Run: pnpm design:sync"
-            exit 1
-          fi
-          echo "Design tokens in sync"
+      - name: Validate prek configs
+        run: uvx prek@0.4.12 validate-config prek.toml apps/*/prek.toml packages/*/prek.toml
+      - name: prek run --all-files (format + lint + gates)
+        # Formatters mutate; prek exits non-zero if any file needed formatting
+        # or any lint/gate failed — the comprehensive single-source gate.
+        run: uvx prek@0.4.12 run --all-files
+      - name: prek run --stage pre-push --all-files (tests)
+        run: uvx prek@0.4.12 run --stage pre-push --all-files
 
-  backend:
-    name: Rust (${{ matrix.os }})
+  desktop-rust:
+    name: Desktop Rust (${{ matrix.os }})
     needs: changes
     if: needs.changes.outputs.desktop == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -131,22 +108,21 @@ jobs:
       - name: Test
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 
-  pairing-server:
-    name: Pairing Server
+  e2e:
+    name: E2E (Playwright)
     needs: changes
-    if: needs.changes.outputs.pairing == 'true'
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v4
         with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+          version: 11
+      - uses: actions/setup-node@v4
         with:
-          workspaces: apps/pairing-server
-      - name: Format
-        run: cargo fmt --check --manifest-path apps/pairing-server/Cargo.toml
-      - name: Clippy
-        run: cargo clippy --manifest-path apps/pairing-server/Cargo.toml -- -D warnings
-      - name: Unit + Integration tests
-        run: cargo test --manifest-path apps/pairing-server/Cargo.toml
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Playwright
+        run: pnpm test:e2e

@@ -102,10 +102,13 @@ def main() -> int:
         f"{ssh_dir}:/ssh:ro",
         "-v",
         f"{vault_dir}:/vault:ro",
+        # Ansible refuses to load ./ansible.cfg from a world-writable cwd —
+        # and a Windows bind-mount inside the container is always 0777. The
+        # env var bypasses that check and points at the repo-root config.
         "-e",
-        "ANSIBLE_CONFIG=/workspace/apps/pairing-server/devops/ansible/ansible.cfg",
+        "ANSIBLE_CONFIG=/workspace/ansible.cfg",
         "-w",
-        "/workspace/apps/pairing-server/devops/ansible",
+        "/workspace",
         runner_image,
         args.env,
     ]

@@ -31,6 +31,7 @@ export const buttonVariants = cva(
         md: 'h-10 px-4 text-sm',
         lg: 'h-12 px-6 text-base',
         icon: 'h-10 w-10',
+        'icon-sm': 'h-7 w-7',
       },
     },
     defaultVariants: {
@@ -42,7 +43,7 @@ export const buttonVariants = cva(
 
 export interface ButtonProps {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive';
-  size?: 'sm' | 'md' | 'lg' | 'icon';
+  size?: 'sm' | 'md' | 'lg' | 'icon' | 'icon-sm';
   isLoading?: boolean;
   children: ReactNode;
   onClick?: () => void;

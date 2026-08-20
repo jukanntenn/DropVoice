@@ -9,15 +9,14 @@
 # Run before pushing to staging / releasing to verify that the
 # production-shaped config actually boots and serves:
 #
-#   docker compose -f apps/pairing-server/docker/docker-compose.local.yml up -d --build
-#   python scripts/smoke.py http://localhost:8080
-#   cargo test -p dropvoice-pairing-server --test e2e-caddy -- --ignored
-#   docker compose -f apps/pairing-server/docker/docker-compose.local.yml down -v
+#   pnpm accept:up     # = docker compose -f apps/pairing-server/docker/docker-compose.local.yml up -d --build
+#   pnpm accept:test   # = e2e-caddy (--ignored) + scripts/smoke.py http://localhost:8080
+#   pnpm accept:down   # = ... down -v
 #
-# Runtime config lives in config.local.toml (gitignored; all fields documented
-# in the file itself), mounted at the backend's built-in path /app/config.toml.
-# Only RUST_LOG stays an environment variable (runtime verbosity, not
-# configuration).
+# Runtime config lives in the committed config.acceptance.toml (rate limit
+# raised, CORS for tauri dev + packaged desktop), mounted at the backend's
+# built-in path /app/config.toml. Debug toggles stay as environment variables:
+# ENABLE_DOCS=true (Swagger UI, env-only debug switch) and RUST_LOG.
 #
 # Like e2e, local acceptance uses no persistent data volumes: the SQLite file
 # lives entirely inside the ephemeral container's writable layer, and `down`
@@ -27,7 +26,6 @@
 #   - build: local context  vs.  image: <registry>/dropvoice/pairing-server:<tag>
 #   - no TLS at all  vs.  staging HTTP behind tunnel TLS / production
 #     Cloudflare Origin CA TLS
-#   - rate limit raised to 10000 in config.local.toml for e2e / load tests
 # Everything else — Caddy routing, loopback backend, healthcheck, logging
 # limits, restart policy — matches deployed forms.
 
@@ -40,10 +38,11 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
-      - ./config.local.toml:/app/config.toml:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./config.acceptance.toml:/app/config.toml:ro
     environment:
       - RUST_LOG=info,dropvoice_pairing_server=debug
+      - ENABLE_DOCS=true
     ulimits:
       nofile:
         soft: 65536

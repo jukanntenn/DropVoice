@@ -20,17 +20,6 @@ interface SseOfferEvent {
   sdp: string;
 }
 
-/** 信令服务器 API 基础 URL（dev: 走直连或 Vite 不可用；prod: 同域）。 */
-function apiBaseUrl(): string {
-  // prod: PWA 同域 /api/*；桌面 webview origin 是 http(s)://tauri.localhost，
-  // 需显式指向信令服务器。通过 VITE_SIGNALING_BASE_URL 注入（构建时）。
-  // 默认 https://dropvoice.bytehome.fun（staging/生产同域，与 Rust
-  // DEFAULT_PAIRING_SERVER_URL 一致）。本地开发连本地后端时显式覆盖：
-  // VITE_SIGNALING_BASE_URL=http://localhost:38424。
-  const env = import.meta.env.VITE_SIGNALING_BASE_URL as string | undefined;
-  return env && env.length > 0 ? env : 'https://dropvoice.bytehome.fun';
-}
-
 /** offer 处理回调（由 webrtc.ts 注册：生成 answer，建立 DataChannel）。 */
 type OfferHandler = (event: SseOfferEvent) => Promise<{ accepted: boolean; sdp?: string }>;
 
@@ -51,6 +40,8 @@ export class SignalingClient {
   private deviceId: string;
   private eventSource: EventSource | null = null;
   private token: string;
+  /** 信令服务器 base URL（start() 时从 Rust 解析结果获取，无构建时默认值）。 */
+  private baseUrl = '';
   onOffer: OfferHandler | null = null;
   private pairingTokenUnlisten: UnlistenFn | null = null;
   private stopped = false;
@@ -65,6 +56,11 @@ export class SignalingClient {
   /** 启动 SSE 长连接。token 由 Rust heartbeat emit 提供。 */
   async start(initialToken: string): Promise<void> {
     this.token = initialToken;
+
+    // URL 唯一真源在 Rust（env PAIRING_SERVER_URL → config.toml
+    // network.pairing_server_url），运行时经 get_signaling_url 下发 ——
+    // 心跳注册与 SSE 永远指向同一台服务器。
+    this.baseUrl = (await tauriInvoke.getSignalingUrl()).replace(/\/+$/, '');
 
     // 看门狗必须最先武装（不依赖 listen 是否 resolve）：
     // 90s 无任何事件（keepalive/ping 15s 一次）→ 连接已被中间层静默掐断
@@ -117,7 +113,7 @@ export class SignalingClient {
   /** 建立/重建 SSE 连接。 */
   private connectSse(): void {
     if (this.stopped) return;
-    const url = `${apiBaseUrl()}/api/devices/${this.deviceId}/webrtc/events?token=${encodeURIComponent(this.token)}`;
+    const url = `${this.baseUrl}/api/devices/${this.deviceId}/webrtc/events?token=${encodeURIComponent(this.token)}`;
     const es = new EventSource(url);
     this.eventSource = es;
     this.lastEventAt = Date.now();
@@ -189,7 +185,7 @@ export class SignalingClient {
         ? { session_id: event.session_id, sdp: result.sdp, status: 'accepted' }
         : { session_id: event.session_id, status: 'rejected', reason: 'invalid_credential' };
 
-    await fetch(`${apiBaseUrl()}/api/devices/${this.deviceId}/webrtc/answer`, {
+    await fetch(`${this.baseUrl}/api/devices/${this.deviceId}/webrtc/answer`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

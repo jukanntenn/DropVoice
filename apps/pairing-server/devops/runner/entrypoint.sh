@@ -3,7 +3,10 @@
 #
 # Windows bind-mounts carry no POSIX permissions, so SSH keys and the vault
 # password file are copied into the container and chmod 600'd before use.
-# /ssh and /vault are mounted read-only by deploy.ps1 / deploy.sh.
+# /ssh and /vault are mounted read-only by deploy.py.
+#
+# Runs from /workspace (repo root): inventory comes from the repo-root
+# ansible.cfg, so no -i flag is needed.
 set -e
 
 ENV_NAME="$1"
@@ -18,4 +21,4 @@ PW_FILE="/tmp/dropvoice-${ENV_NAME}.pwd"
 cp "/vault/dropvoice-${ENV_NAME}.pwd" "$PW_FILE"
 chmod 600 "$PW_FILE"
 
-exec ansible-playbook -i hosts.yml deploy.yml -l "$ENV_NAME" --vault-password-file "$PW_FILE" "$@"
+exec ansible-playbook apps/pairing-server/devops/ansible/deploy.yml -l "$ENV_NAME" --vault-password-file "$PW_FILE" "$@"

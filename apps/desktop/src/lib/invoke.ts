@@ -25,6 +25,7 @@ export const tauriInvoke = {
   validateCredential: (credential: string) => invoke<string>('validate_credential', { credential }),
   refreshPairingToken: () => invoke<string>('refresh_pairing_token'),
   getPairingToken: () => invoke<string | null>('get_pairing_token'),
+  getSignalingUrl: () => invoke<string>('get_signaling_url'),
   registerClient: (client_id: string) => invoke<void>('register_client', { clientId: client_id }),
   unregisterClient: (client_id: string) =>
     invoke<void>('unregister_client', { clientId: client_id }),
@@ -33,5 +34,6 @@ export const tauriInvoke = {
   setLanguage: (language: string) => invoke<void>('set_language', { language }),
   setTheme: (theme: string) => invoke<void>('set_theme', { theme }),
   setInputDelay: (delay_ms: number) => invoke<void>('set_input_delay', { delayMs: delay_ms }),
+  setAutostart: (enabled: boolean) => invoke<void>('set_autostart', { enabled }),
   minimizeToTray: () => invoke<void>('minimize_to_tray'),
 } as const;

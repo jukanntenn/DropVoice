@@ -74,5 +74,5 @@ apps/mobile/public/icons/generated/
 *.tmp
 *.bak
 
-# Local acceptance config (template: config.local.toml.example)
-apps/pairing-server/docker/config.local.toml
+# Local dev config for bare `cargo run` (template: config.local.toml.example)
+apps/pairing-server/config.local.toml

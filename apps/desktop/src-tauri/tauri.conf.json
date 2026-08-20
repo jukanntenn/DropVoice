@@ -7,7 +7,7 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
     "beforeDevCommand": "pnpm --filter @dropvoice/desktop dev",
-    "beforeBuildCommand": "node src-tauri/scripts/inject-csp.mjs && pnpm --filter @dropvoice/desktop build"
+    "beforeBuildCommand": "pnpm --filter @dropvoice/desktop build"
   },
   "app": {
     "windows": [
@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' __CSP_CONNECT_SRC__; img-src 'self' data:"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http: https:; img-src 'self' data:"
     }
   },
   "bundle": {

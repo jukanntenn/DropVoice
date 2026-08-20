@@ -1,11 +1,13 @@
-# DropVoice pairing-server Caddyfile — image-baked default (HTTP, self-hosted form).
+# DropVoice pairing-server Caddyfile — HTTP form (the routing single source).
 #
-# This file is the baked default; TLS variants are selected at runtime via a
-# volume mount over /etc/caddy/Caddyfile:
-#   - local acceptance (self-signed HTTPS): docker/Caddyfile.local
-#   - staging (tunnel-terminated HTTPS):    devops/ansible/templates/Caddyfile.staging
-#   - production (Cloudflare Origin CA):    devops/ansible/templates/Caddyfile.production.j2
-# All share the same routing logic; only the TLS layer differs.
+# Used AS-IS by three environments (all plain HTTP :8080 — TLS is always
+# terminated externally, the container never does TLS):
+#   - image default: baked at /etc/caddy/Caddyfile by the Dockerfile
+#   - local acceptance: mounted by docker/docker-compose.local.yml
+#   - staging: copied by the ansible playbook (tunnel terminates HTTPS)
+# The only other variant is the TLS form (production, Cloudflare Origin CA,
+# devops/ansible/templates/Caddyfile.production.j2) — its routing mirrors this
+# file; change routing here and mirror it there.
 #
 # Production form (§10.4): one origin serves both the mobile PWA (baked into
 # the image at /app/mobile-dist) and the WebRTC signaling API, so the phone

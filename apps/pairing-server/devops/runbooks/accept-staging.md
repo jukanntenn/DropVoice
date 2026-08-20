@@ -4,17 +4,17 @@
 
 ## 0. 前置
 
-- [ ] 本机质量门绿：`pnpm quality` + `pnpm test:rust`
-- [ ] 镜像已推送：`python apps/pairing-server/docker/build.py --push`（LAN registry）
-- [ ] 本地容器验收绿：`docker compose -f apps/pairing-server/docker/docker-compose.local.yml up -d --build`
-      → `cargo test -p dropvoice-pairing-server --test e2e-caddy -- --ignored`
-      → `python scripts/smoke.py http://localhost:8080`
-      → `docker compose -f apps/pairing-server/docker/docker-compose.local.yml down -v`
+- [ ] 本机质量门绿：`pnpm quality`（= prek 全仓 format + lint + gates + tests）
+- [ ] 镜像已推送：`pnpm image:push`（LAN registry，tag: main）
+- [ ] 本地容器验收绿：`pnpm accept:up` → `pnpm accept:test`（e2e-caddy + smoke，
+      配置为入库的 docker/config.acceptance.toml）→ `pnpm accept:down`
 
 ## 1. 部署
 
-- [ ] `python apps/pairing-server/devops/deploy.py staging`
-- [ ] 部署后冒烟：`python scripts/smoke.py https://dropvoice.bytehome.fun`（4/4 PASS）
+- [ ] `pnpm deploy:staging`
+- [ ] 冒烟已随部署自动执行：playbook 末尾会跑 `scripts/smoke.py https://dropvoice.bytehome.fun
+      --expect-version <部署 checkout 的 git describe>`（4/4 PASS，含版本比对）；
+      部署命令退出码非 0 即失败。如需复核：`python scripts/smoke.py https://dropvoice.bytehome.fun`
 - [ ] 运维确认：隧道仍指向 fn:8080（如切换过端口，与运维同步）
 
 ## 2. 真机 dogfooding（5-10 分钟）

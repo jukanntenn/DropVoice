@@ -67,13 +67,13 @@ DropVoice is a Tauri application with:
 
 ## Configuration
 
-Configuration is stored in `dropvoice.toml` (platform-specific config directory).
+Configuration is stored in `config.toml` (platform-specific config directory).
 
-See [specs/full/14-configuration.md](specs/full/14-configuration.md) for the full configuration reference.
+See [specs/full/01-configuration.md](specs/full/01-configuration.md) for the full configuration reference.
 
 ## Documentation
 
-- [Technical Specifications](specs/full/) — Complete system design
+- [Specifications](specs/full/) — Design specs (configuration mechanism)
 - [Design System](DESIGN.md) — Visual language and design tokens
 - [Changelog](CHANGELOG.md) — Version history
 

@@ -56,4 +56,6 @@ export interface Settings {
   port: number;
   max_text_length: number;
   minimize_to_tray: boolean;
+  /** 开机自启动（tauri-plugin-autostart 实时状态）。 */
+  autostart: boolean;
 }

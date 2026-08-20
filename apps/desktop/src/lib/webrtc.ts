@@ -17,7 +17,9 @@ type DataChannelMessage =
   | { type: 'text'; text: string }
   | { type: 'ack' }
   | { type: 'token'; token: string }
-  | { type: 'error'; code: string; message?: string };
+  | { type: 'error'; code: string; message?: string }
+  // 手机上报稳定身份（客户端→桌面，见 wireDataChannel 的 hello 处理）。
+  | { type: 'hello'; clientId: string };
 
 /** ICE 收集超时 fallback（§5.5 2s）。 */
 const ICE_GATHERING_TIMEOUT = 2000;
@@ -90,20 +92,26 @@ function waitForIceComplete(pc: RTCPeerConnection): Promise<string> {
  * 注册 onmessage/onopen/onclose。首次配对成功（credentialKind==='code'）+ open
  * 后签发 token 发给手机。
  *
+ * 注册键（`reg.id`）：
+ * - 初始为 `session_id`（每次 offer 全新）——立即注册，保证旧手机/计数即时可用。
+ * - 收到手机 `hello.clientId` 后改为稳定 clientId 重新注册（先注销旧键），
+ *   使活跃设备数以"设备"而非"会话"计（断连重连不虚增）。
+ * - `connectionstatechange` 与 channel close 都以最新 `reg.id` 注销。
+ *
  * @param channel DataChannel
  * @param credentialKind validate_credential 返回的命中类型（'code' 首次配对）
- * @param clientId 连接标识（注册到 ConnectionManager）
+ * @param reg 可变的注册键（初始 session_id；hello 后改写为稳定 clientId）
  */
 export function wireDataChannel(
   channel: RTCDataChannel,
   credentialKind: 'code' | 'token' | 'invalid',
-  clientId: string
+  reg: { id: string }
 ): void {
   channel.addEventListener('open', async () => {
-    console.debug('[webrtc] DataChannel open', clientId);
-    // 注册到 ConnectionManager。
+    console.debug('[webrtc] DataChannel open', reg.id);
+    // 注册到 ConnectionManager（初始键 = session_id）。
     try {
-      await tauriInvoke.registerClient(clientId);
+      await tauriInvoke.registerClient(reg.id);
     } catch (err) {
       console.error('[webrtc] registerClient failed', err);
     }
@@ -124,7 +132,7 @@ export function wireDataChannel(
       if (msg.type === 'text') {
         // §5.4：invoke('inject_text') → Rust ConnectionManager → Enigo。
         try {
-          await tauriInvoke.injectText(msg.text, clientId);
+          await tauriInvoke.injectText(msg.text, reg.id);
           sendMessage(channel, { type: 'ack' });
         } catch (err) {
           console.error('[webrtc] injectText failed', err);
@@ -134,6 +142,17 @@ export function wireDataChannel(
             message: err instanceof Error ? err.message : String(err),
           });
         }
+      } else if (msg.type === 'hello' && msg.clientId && msg.clientId !== reg.id) {
+        // 稳定身份上报：把注册键从 session_id 换到客户端 clientId。
+        const old = reg.id;
+        reg.id = msg.clientId;
+        console.debug('[webrtc] hello: re-keying registration', old, '->', reg.id);
+        try {
+          await tauriInvoke.unregisterClient(old);
+          await tauriInvoke.registerClient(reg.id);
+        } catch (err) {
+          console.error('[webrtc] re-register under clientId failed', err);
+        }
       }
     } catch (err) {
       console.error('[webrtc] DataChannel message parse failed', err);
@@ -141,16 +160,16 @@ export function wireDataChannel(
   });
 
   channel.addEventListener('close', async () => {
-    console.debug('[webrtc] DataChannel close', clientId);
+    console.debug('[webrtc] DataChannel close', reg.id);
     try {
-      await tauriInvoke.unregisterClient(clientId);
+      await tauriInvoke.unregisterClient(reg.id);
     } catch (err) {
       console.error('[webrtc] unregisterClient failed', err);
     }
   });
 
   channel.addEventListener('error', (e) => {
-    console.error('[webrtc] DataChannel error', clientId, e);
+    console.error('[webrtc] DataChannel error', reg.id, e);
   });
 }
 

@@ -1,0 +1,89 @@
+name: Docker Publish
+
+# Tag semantics (git tag -> image tags on ghcr.io AND Docker Hub):
+#   v0.1.3      -> 0.1.3 + latest   (stable release; latest never tracks prereleases)
+#   v0.1.3-rc.1 -> 0.1.3-rc.1       (prerelease: version tag only, no latest)
+# `main` is never built here — it is the local rolling tag on the internal
+# registry (192.168.5.50:5000) moved by apps/pairing-server/docker/build.py --push.
+#
+# Multi-platform uses NATIVE runners per arch (no QEMU): amd64 on ubuntu-latest,
+# arm64 on ubuntu-24.04-arm. Arch-suffixed images are merged into multi-arch
+# manifests by the manifests job. Requires repo secrets DOCKERHUB_USERNAME and
+# DOCKERHUB_TOKEN (ghcr.io authenticates with the built-in GITHUB_TOKEN).
+# Note: ghcr packages start private — flip to public in the package settings
+# if anonymous pulls are needed; Docker Hub images are public.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: dropvoice-pairing-server
+  GHCR: ghcr.io/${{ github.repository_owner }}
+  HUB: docker.io/${{ secrets.DOCKERHUB_USERNAME }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux/amd64, runs-on: ubuntu-latest, arch: amd64 }
+          - { platform: linux/arm64, runs-on: ubuntu-24.04-arm, arch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to ghcr.io and Docker Hub
+        run: |
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      - name: Build and push arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/pairing-server/docker/Dockerfile
+          platforms: ${{ matrix.platform }}
+          # Keep the git-describe format build.py bakes locally (leading v).
+          build-args: |
+            VERSION=${{ github.ref_name }}
+          push: true
+          cache-from: type=gha,scope=build-${{ matrix.arch }}
+          cache-to: type=gha,scope=build-${{ matrix.arch }},mode=max
+          tags: |
+            ${{ env.GHCR }}/${{ env.IMAGE }}:${{ github.ref_name }}-${{ matrix.arch }}
+            ${{ env.HUB }}/${{ env.IMAGE }}:${{ github.ref_name }}-${{ matrix.arch }}
+
+  manifests:
+    name: Merge manifests
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to ghcr.io and Docker Hub
+        run: |
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login docker.io -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      - name: Create multi-arch manifests
+        run: |
+          git_tag="${GITHUB_REF_NAME}"
+          version="${git_tag#v}"
+          # Stability gate: only exact vX.Y.Z moves `latest` — prereleases never do.
+          if [[ "$git_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            tags=("$version" latest)
+          else
+            tags=("$version")
+          fi
+          for registry in "${{ env.GHCR }}" "${{ env.HUB }}"; do
+            for tag in "${tags[@]}"; do
+              docker buildx imagetools create \
+                -t "$registry/${{ env.IMAGE }}:$tag" \
+                "$registry/${{ env.IMAGE }}:$git_tag-amd64" \
+                "$registry/${{ env.IMAGE }}:$git_tag-arm64"
+            done
+          done

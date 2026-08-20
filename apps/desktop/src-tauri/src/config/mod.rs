@@ -1,80 +1,54 @@
-pub mod migration;
-
 use std::fs;
 use std::path::PathBuf;
 
-use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 
-/// Root configuration loaded from `dropvoice.toml`.
+/// 配对/信令服务器默认地址（生产 API，PWA 与 API 同源，§10.4）。
+///
+/// URL 真源是 `config.toml` 的 `network.pairing_server_url`（serde 默认值
+/// 引用本常量）；env `PAIRING_SERVER_URL` 仅作开发编排覆盖（.vscode/tasks.json
+/// 内置，见 `network::pairing_client::resolve_base_url`）。staging
+/// （https://dropvoice.bytehome.fun）是内网 dogfood 场，不作发布默认值。
+pub const DEFAULT_PAIRING_SERVER_URL: &str = "https://api.dropvoice.app";
+
+/// Root configuration loaded from `config.toml`
+/// (`<config_dir>/dropvoice/config.toml`, Windows:
+/// `%APPDATA%\dropvoice\config.toml`).
+///
+/// 只保留真实生效的字段——每个字段都有消费者（命令 / ConnectionManager /
+/// heartbeat / 日志清理）。窗口尺寸与更新器由 `tauri.conf.json` 单独管辖，
+/// 不在此重复。无 migration：TOML 解析忽略未知字段，删字段不需要迁移。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DropVoiceConfig {
-    #[serde(default)]
-    pub meta: MetaConfig,
     #[serde(default)]
     pub app: AppConfig,
     #[serde(default)]
     pub server: ServerConfig,
     #[serde(default)]
+    pub network: NetworkConfig,
+    #[serde(default)]
     pub injection: InjectionConfig,
     #[serde(default)]
     pub security: SecurityConfig,
     #[serde(default)]
-    pub updater: UpdaterConfig,
-    #[serde(default)]
     pub telemetry: TelemetryConfig,
     #[serde(default)]
     pub window: WindowConfig,
-    #[serde(default)]
-    pub devices: DevicesConfig,
     /// Per-device identity and pairing state (spec 11 §7.1 / §14).
     #[serde(default)]
     pub device: DeviceConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MetaConfig {
-    #[serde(default = "default_config_version")]
-    pub config_version: u32,
-    #[serde(default = "default_today")]
-    pub created_at: String,
-    #[serde(default = "default_today")]
-    pub last_modified: String,
-}
-
-fn default_config_version() -> u32 {
-    2
-}
-
-fn default_today() -> String {
-    Utc::now().format("%Y-%m-%d").to_string()
-}
-
-impl Default for MetaConfig {
-    fn default() -> Self {
-        Self {
-            config_version: default_config_version(),
-            created_at: default_today(),
-            last_modified: default_today(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    #[serde(default = "default_app_version")]
-    pub version: String,
     #[serde(default = "default_language")]
     pub language: String,
     #[serde(default = "default_theme")]
     pub theme: String,
-}
-
-fn default_app_version() -> String {
-    "0.2.0".to_string()
 }
 
 fn default_language() -> String {
@@ -88,7 +62,6 @@ fn default_theme() -> String {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: default_app_version(),
             language: default_language(),
             theme: default_theme(),
         }
@@ -99,18 +72,12 @@ impl Default for AppConfig {
 pub struct ServerConfig {
     #[serde(default = "default_port")]
     pub port: u16,
-    #[serde(default = "default_host")]
-    pub host: String,
     #[serde(default = "default_max_connections")]
     pub max_connections: usize,
 }
 
 fn default_port() -> u16 {
     38425
-}
-
-fn default_host() -> String {
-    "0.0.0.0".to_string()
 }
 
 fn default_max_connections() -> usize {
@@ -121,8 +88,27 @@ impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             port: default_port(),
-            host: default_host(),
             max_connections: default_max_connections(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkConfig {
+    /// 配对/信令服务器 base URL（heartbeat 注册 + webview SSE 共用，
+    /// 由 `get_signaling_url` 命令下发）。env `PAIRING_SERVER_URL` 覆盖之。
+    #[serde(default = "default_pairing_server_url")]
+    pub pairing_server_url: String,
+}
+
+fn default_pairing_server_url() -> String {
+    DEFAULT_PAIRING_SERVER_URL.to_string()
+}
+
+impl Default for NetworkConfig {
+    fn default() -> Self {
+        Self {
+            pairing_server_url: default_pairing_server_url(),
         }
     }
 }
@@ -131,6 +117,7 @@ impl Default for ServerConfig {
 pub struct InjectionConfig {
     #[serde(default = "default_delay_ms")]
     pub delay_ms: u64,
+    /// 单次注入文本上限（字符数），`inject_text` 命令与注入器双层校验。
     #[serde(default = "default_max_text_length")]
     pub max_text_length: usize,
     #[serde(default = "default_queue_size")]
@@ -142,7 +129,7 @@ fn default_delay_ms() -> u64 {
 }
 
 fn default_max_text_length() -> usize {
-    10000
+    crate::text::DEFAULT_MAX_TEXT_LENGTH
 }
 
 fn default_queue_size() -> usize {
@@ -159,102 +146,33 @@ impl Default for InjectionConfig {
     }
 }
 
+/// 配对安全参数。配对码固定 6 位数字（webrtc-scan-direct-design §3.2），
+/// 不作配置项。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityConfig {
-    /// 配对码长度（已固定为 6 位，webrtc-scan-direct-design §3.2）。
-    /// 保留此字段仅为 TOML 向后兼容；`generate_pairing_code()` 忽略它。
-    #[serde(default = "default_pairing_code_length")]
-    #[allow(dead_code)]
-    pub pairing_code_length: usize,
-    #[serde(default = "default_pairing_expiry")]
+    /// 配对码 TTL（分钟），同时是自主轮换周期。
+    #[serde(default = "default_pairing_code_expiry")]
     pub pairing_code_expiry_minutes: u64,
-    #[serde(default = "default_rate_per_minute")]
-    pub rate_limit_per_minute: usize,
-    #[serde(default = "default_rate_per_hour")]
-    pub rate_limit_per_hour: usize,
 }
 
-fn default_pairing_code_length() -> usize {
-    6
-}
-
-fn default_pairing_expiry() -> u64 {
+fn default_pairing_code_expiry() -> u64 {
     5
-}
-
-fn default_rate_per_minute() -> usize {
-    30
-}
-
-fn default_rate_per_hour() -> usize {
-    500
 }
 
 impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
-            pairing_code_length: default_pairing_code_length(),
-            pairing_code_expiry_minutes: default_pairing_expiry(),
-            rate_limit_per_minute: default_rate_per_minute(),
-            rate_limit_per_hour: default_rate_per_hour(),
+            pairing_code_expiry_minutes: default_pairing_code_expiry(),
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdaterConfig {
-    #[serde(default = "default_updater_enabled")]
-    pub enabled: bool,
-    #[serde(default = "default_check_interval")]
-    pub check_interval_hours: u64,
-    #[serde(default = "default_updater_endpoint")]
-    pub endpoint: String,
-}
-
-fn default_updater_enabled() -> bool {
-    true
-}
-
-fn default_check_interval() -> u64 {
-    24
-}
-
-fn default_updater_endpoint() -> String {
-    "https://releases.dropvoice.app/update/manifest.json".to_string()
-}
-
-impl Default for UpdaterConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_updater_enabled(),
-            check_interval_hours: default_check_interval(),
-            endpoint: default_updater_endpoint(),
-        }
-    }
-}
-
+/// 日志保留策略。日志开关/目录不可配（始终开启，目录平台固定，见
+/// `telemetry/logging.rs`）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TelemetryConfig {
-    #[serde(default = "default_telemetry_enabled")]
-    pub enabled: bool,
-    #[serde(default = "default_telemetry_output")]
-    pub output: String,
-    #[serde(default = "default_log_dir")]
-    pub log_dir: String,
     #[serde(default = "default_log_retention")]
     pub log_retention_days: u64,
-}
-
-fn default_telemetry_enabled() -> bool {
-    true
-}
-
-fn default_telemetry_output() -> String {
-    "file".to_string()
-}
-
-fn default_log_dir() -> String {
-    "logs".to_string()
 }
 
 fn default_log_retention() -> u64 {
@@ -264,36 +182,16 @@ fn default_log_retention() -> u64 {
 impl Default for TelemetryConfig {
     fn default() -> Self {
         Self {
-            enabled: default_telemetry_enabled(),
-            output: default_telemetry_output(),
-            log_dir: default_log_dir(),
             log_retention_days: default_log_retention(),
         }
     }
 }
 
+/// 窗口行为。窗口尺寸等由 `tauri.conf.json` 管辖。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowConfig {
-    #[serde(default = "default_window_width")]
-    pub width: u32,
-    #[serde(default = "default_window_height")]
-    pub height: u32,
-    #[serde(default = "default_window_resizable")]
-    pub resizable: bool,
     #[serde(default = "default_minimize_to_tray")]
     pub minimize_to_tray: bool,
-}
-
-fn default_window_width() -> u32 {
-    800
-}
-
-fn default_window_height() -> u32 {
-    650
-}
-
-fn default_window_resizable() -> bool {
-    true
 }
 
 fn default_minimize_to_tray() -> bool {
@@ -303,35 +201,7 @@ fn default_minimize_to_tray() -> bool {
 impl Default for WindowConfig {
     fn default() -> Self {
         Self {
-            width: default_window_width(),
-            height: default_window_height(),
-            resizable: default_window_resizable(),
             minimize_to_tray: default_minimize_to_tray(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DevicesConfig {
-    #[serde(default = "default_max_devices")]
-    pub max_count: usize,
-    #[serde(default = "default_auto_connect")]
-    pub auto_connect: bool,
-}
-
-fn default_max_devices() -> usize {
-    5
-}
-
-fn default_auto_connect() -> bool {
-    true
-}
-
-impl Default for DevicesConfig {
-    fn default() -> Self {
-        Self {
-            max_count: default_max_devices(),
-            auto_connect: default_auto_connect(),
         }
     }
 }
@@ -352,8 +222,50 @@ pub struct DeviceConfig {
     pub pairing_token: Option<String>,
     /// Persisted connection tokens issued to mobile clients (B2).
     /// Survives desktop restart so paired mobiles don't need re-pairing.
-    #[serde(default)]
-    pub connected_tokens: Option<Vec<String>>,
+    ///
+    /// 兼容旧版 `Vec<String>`（无签发时间）——反序列化时视为"现在签发"，
+    /// 获得完整 30 天 TTL 窗口。详见 `deserialize_connected_tokens`。
+    #[serde(default, deserialize_with = "deserialize_connected_tokens")]
+    pub connected_tokens: Option<Vec<ConnectionTokenRecord>>,
+}
+
+/// 一个持久化的连接令牌记录：令牌 + 签发时间（30 天 TTL，`auth::CONNECTION_TOKEN_TTL`）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionTokenRecord {
+    pub token: String,
+    pub issued_at: DateTime<Utc>,
+}
+
+/// 兼容两种持久化形态：
+/// - 旧版（字符串数组）：`["dvct_...", ...]` → 签发时间记为现在（30 天窗口从本轮起算）。
+/// - 新版（记录数组）：`[{ token, issued_at }, ...]`。
+fn deserialize_connected_tokens<'de, D>(
+    deserializer: D,
+) -> Result<Option<Vec<ConnectionTokenRecord>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Tokens {
+        Legacy(Vec<String>),
+        Records(Vec<ConnectionTokenRecord>),
+    }
+
+    let opt = Option::<Tokens>::deserialize(deserializer)?;
+    Ok(match opt {
+        None => None,
+        Some(Tokens::Records(records)) => Some(records),
+        Some(Tokens::Legacy(tokens)) => Some(
+            tokens
+                .into_iter()
+                .map(|token| ConnectionTokenRecord {
+                    token,
+                    issued_at: Utc::now(),
+                })
+                .collect(),
+        ),
+    })
 }
 
 fn default_device_id() -> String {
@@ -422,9 +334,9 @@ impl DropVoiceConfig {
             .join("dropvoice")
     }
 
-    /// Returns the path to `dropvoice.toml`.
+    /// Returns the path to `config.toml`.
     pub fn config_path() -> PathBuf {
-        Self::config_dir().join("dropvoice.toml")
+        Self::config_dir().join("config.toml")
     }
 
     /// Loads the config, creating a default one on first run.
@@ -437,11 +349,9 @@ impl DropVoiceConfig {
         }
 
         let contents = fs::read_to_string(&path).map_err(|e| AppError::io(&path, e))?;
-        let mut config: DropVoiceConfig = toml::from_str(&contents).map_err(|e| {
+        let config: DropVoiceConfig = toml::from_str(&contents).map_err(|e| {
             AppError::Internal(format!("failed to parse {}: {}", path.display(), e))
         })?;
-
-        migration::migrate_config(&mut config);
         Ok(config)
     }
 
@@ -465,13 +375,18 @@ mod tests {
     #[test]
     fn default_config_has_expected_values() {
         let config = DropVoiceConfig::default();
-        assert_eq!(config.meta.config_version, 2);
         assert_eq!(config.server.port, 38425);
-        assert_eq!(config.server.host, "0.0.0.0");
-        assert_eq!(config.injection.max_text_length, 10000);
-        assert_eq!(config.security.pairing_code_length, 6);
-        assert_eq!(config.security.rate_limit_per_minute, 30);
-        assert_eq!(config.devices.max_count, 5);
+        assert_eq!(config.server.max_connections, 10);
+        assert_eq!(
+            config.network.pairing_server_url,
+            DEFAULT_PAIRING_SERVER_URL
+        );
+        assert_eq!(config.injection.delay_ms, 10);
+        assert_eq!(config.injection.max_text_length, 10_000);
+        assert_eq!(config.injection.queue_size, 100);
+        assert_eq!(config.security.pairing_code_expiry_minutes, 5);
+        assert_eq!(config.telemetry.log_retention_days, 30);
+        assert!(config.window.minimize_to_tray);
         assert_eq!(config.app.language, "en");
         assert_eq!(config.app.theme, "system");
         // Device config (spec 11 §7.1).
@@ -487,44 +402,68 @@ mod tests {
         let parsed: DropVoiceConfig = toml::from_str(&toml_str).unwrap();
         assert_eq!(parsed.server.port, config.server.port);
         assert_eq!(parsed.app.language, config.app.language);
+        assert_eq!(
+            parsed.injection.max_text_length,
+            config.injection.max_text_length
+        );
     }
 
+    /// 无 migration 的依据：TOML 解析忽略未知字段——含已删除历史字段
+    /// （host / updater / devices 等）的旧文件仍可正常加载。
     #[test]
-    fn migration_v0_to_v2() {
-        let mut config = DropVoiceConfig::default();
-        config.meta.config_version = 0;
-        migration::migrate_config(&mut config);
-        assert_eq!(config.meta.config_version, 2);
-        // device fields auto-populated by serde(default).
-        assert!(!config.device.device_id.is_empty());
+    fn unknown_and_removed_fields_are_ignored() {
+        let legacy = r#"
+[app]
+version = "0.1.0"
+[server]
+host = "0.0.0.0"
+[injection]
+max_text_length = 42
+[updater]
+endpoint = "https://old.example/manifest.json"
+[devices]
+max_count = 9
+"#;
+        let parsed: DropVoiceConfig = toml::from_str(legacy).unwrap();
+        assert_eq!(parsed.injection.max_text_length, 42);
+        assert_eq!(parsed.server.max_connections, 10);
     }
 
+    /// 旧版 `connected_tokens = ["dvct_..."]`（无签发时间）必须仍可加载，
+    /// 并视为"现在签发"（完整 30 天 TTL 窗口，无 migration 也兼容升级）。
     #[test]
-    fn migration_v1_to_v2() {
-        let mut config = DropVoiceConfig::default();
-        config.meta.config_version = 1;
-        migration::migrate_config(&mut config);
-        assert_eq!(config.meta.config_version, 2);
-        assert!(!config.device.device_id.is_empty());
+    fn legacy_connected_tokens_string_array_loads_as_records() {
+        let legacy = r#"
+[device]
+device_id = "dev-1"
+device_name = "PC"
+connected_tokens = ["dvct_legacy1", "dvct_legacy2"]
+"#;
+        let parsed: DropVoiceConfig = toml::from_str(legacy).unwrap();
+        let tokens = parsed.device.connected_tokens.expect("tokens present");
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].token, "dvct_legacy1");
+        // 签发时间约为现在（30 天窗口内有效）。
+        let age = Utc::now().signed_duration_since(tokens[0].issued_at);
+        assert!(age.num_seconds() < 5);
     }
 
+    /// 新版 `{token, issued_at}` 记录数组正常往返。
     #[test]
-    fn migration_v2_is_noop() {
-        let mut config = DropVoiceConfig::default();
-        config.meta.config_version = 2;
-        let before = config.server.port;
-        let device_id = config.device.device_id.clone();
-        migration::migrate_config(&mut config);
-        assert_eq!(config.meta.config_version, 2);
-        assert_eq!(config.server.port, before);
-        assert_eq!(config.device.device_id, device_id);
-    }
-
-    #[test]
-    fn unknown_version_resets_to_default() {
-        let mut config = DropVoiceConfig::default();
-        config.meta.config_version = 999;
-        migration::migrate_config(&mut config);
-        assert_eq!(config.meta.config_version, 2);
+    fn connected_token_records_round_trip() {
+        let config = DropVoiceConfig {
+            device: DeviceConfig {
+                connected_tokens: Some(vec![ConnectionTokenRecord {
+                    token: "dvct_rec".into(),
+                    issued_at: Utc::now(),
+                }]),
+                ..DeviceConfig::default()
+            },
+            ..DropVoiceConfig::default()
+        };
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        let parsed: DropVoiceConfig = toml::from_str(&toml_str).unwrap();
+        let tokens = parsed.device.connected_tokens.unwrap();
+        assert_eq!(tokens[0].token, "dvct_rec");
     }
 }

@@ -1,0 +1,59 @@
+# packages/core — pure-TS state machines / atoms / types. Workspace mode runs
+# these hooks with cwd=packages/core and strips the packages/core/ prefix.
+# Root builtins still cover these files.
+
+[[repos]]
+repo = "local"
+
+# ---- format group: mutating fixers ----
+[[repos.hooks]]
+id = "prettier"
+name = "prettier (core)"
+language = "system"
+entry = "pnpm exec prettier --write"
+files = "\\.(ts|tsx|js|jsx|json|css|html)$"
+pass_filenames = true
+groups = ["format"]
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "oxlint-fix"
+name = "oxlint --fix (core)"
+language = "system"
+entry = "pnpm exec oxlint --fix"
+files = "\\.(ts|tsx|js|jsx)$"
+pass_filenames = true
+groups = ["format"]
+stages = ["pre-commit"]
+
+# ---- lint group: read-only gates ----
+[[repos.hooks]]
+id = "oxlint"
+name = "oxlint (core)"
+language = "system"
+entry = "pnpm exec oxlint"
+files = "\\.(ts|tsx|js|jsx)$"
+pass_filenames = true
+groups = ["lint"]
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "typecheck"
+name = "tsc --noEmit (core)"
+language = "system"
+entry = "pnpm typecheck"
+files = "\\.(ts|tsx)$"
+pass_filenames = false
+groups = ["lint"]
+stages = ["pre-commit"]
+
+# ---- check group: tests (pre-push) ----
+[[repos.hooks]]
+id = "vitest"
+name = "vitest (core)"
+language = "system"
+entry = "pnpm test"
+files = "\\.(ts|tsx)$"
+pass_filenames = false
+groups = ["check"]
+stages = ["pre-push"]

@@ -6,8 +6,9 @@ import { defineConfig } from 'vite';
 
 // 开发 / 本地验收：/api 反代到 pairing-server，PWA 走同源。
 // 默认直连裸后端（cargo run，http://localhost:38424）。容器验收
-// （docker-compose.local.yml，自签 HTTPS :4443）时覆盖 target：
-//   $env:VITE_API_PROXY_TARGET = "https://localhost:4443"
+// （pnpm accept:up，HTTP :8080）时覆盖 target —— .vscode/tasks.json 的
+// accept:mobile task 已内置：
+//   VITE_API_PROXY_TARGET=http://localhost:8080
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:38424';
 
 // https://vite.dev/config/

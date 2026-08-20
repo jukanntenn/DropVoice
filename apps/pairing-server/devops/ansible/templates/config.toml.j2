@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+# dropvoice pairing-server runtime config (rendered for {{ env }}).
+#
+# Values come from group_vars/<env>.yml; mounted at /app/config.toml
+# (see src/config.rs for the load order and env escape hatches).
+# cors_origins is derived from public_url + the fixed tauri webview origins,
+# so environments never hand-maintain a cors list. Debug toggles (ENABLE_DOCS)
+# are env-only and default off. Only RUST_LOG / LOG_DIR stay as compose
+# environment (runtime verbosity and container log path, not application
+# configuration).
+
+listen_addr = "127.0.0.1:{{ backend_port }}"
+database_url = "{{ database_url }}"
+rate_limit_per_sec = {{ rate_limit_per_sec }}
+cors_origins = {{ ([public_url, 'http://tauri.localhost', 'tauri://localhost'] + (cors_extra_origins | default([]))) | tojson }}
