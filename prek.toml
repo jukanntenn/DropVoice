@@ -65,13 +65,16 @@ hooks = [{ id = "actionlint", groups = ["check"], stages = ["pre-commit"] }]
 repo = "local"
 
 # ---- format group: repo-level formatters (apps/ and packages/ own their files) ----
+# `.agents/` content (dv-rfcs records, skills) is real hand-written material and IS
+# formatted; only the per-tool adapter dirs stay exempt. Wholesale-excluding
+# `.agents/` once let gates pass green over real content — do not reintroduce it.
 [[repos.hooks]]
 id = "prettier-root"
 name = "prettier (root, non-app files)"
 language = "system"
 entry = "pnpm exec prettier --write"
 files = "\\.(ts|tsx|js|jsx|json|css|md|ya?ml|html)$"
-exclude = "^(apps|packages)/|^(\\.agents|\\.claude|\\.codex|\\.opencode|\\.zcode)/|^packages/ui/src/tokens/theme\\.css$|^Cargo\\.lock$|^pnpm-lock\\.yaml$"
+exclude = "^(apps|packages)/|^(\\.claude|\\.codex|\\.opencode|\\.zcode)/|^packages/ui/src/tokens/theme\\.css$|^Cargo\\.lock$|^pnpm-lock\\.yaml$"
 pass_filenames = true
 groups = ["format"]
 stages = ["pre-commit"]
@@ -131,6 +134,21 @@ language = "system"
 entry = "python scripts/check_lockfiles.py"
 files = "(package\\.json|pnpm-workspace\\.yaml|Cargo\\.toml|Cargo\\.lock|pnpm-lock\\.yaml)$"
 pass_filenames = false
+groups = ["check"]
+stages = ["pre-commit"]
+
+# Markdown documentation gates (dv-rfcs format, doc pairs, budgets, links).
+# Fix: edit the doc (fix the doc, not the gate); mirrors are rebuilt by
+# `python scripts/sync_agent_files.py`. `.claude/skills` is a byte copy of
+# `.agents/skills` (checked at the source); the four tool dirs are adapters.
+[[repos.hooks]]
+id = "doc-check"
+name = "documentation gates"
+language = "system"
+entry = "python scripts/doc_sync.py"
+files = "\\.md$"
+exclude = "^\\.claude/|^\\.codex/|^\\.opencode/|^\\.zcode/"
+pass_filenames = true
 groups = ["check"]
 stages = ["pre-commit"]
 
