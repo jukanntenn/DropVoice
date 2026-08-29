@@ -1,433 +1,66 @@
 # AGENTS.md
 
-Guidance for AI coding agents (Claude Code, Codex, ZCode, Cursor) working in this repository.
-This file is the single source of truth; `CLAUDE.md` is a byte-for-byte copy kept in sync by the prek `agents-sync` hook.
+Guidance for AI coding agents (Claude Code, Codex, ZCode, Cursor) working in this repository. `AGENTS.md` is the single source of truth at every level; each `CLAUDE.md` is a byte-for-byte copy.
 
-## Project Description
+DropVoice sends voice-to-text input from a mobile phone to a PC over a WebRTC DataChannel (P2P; phone = offerer, desktop = answerer); a public pairing-server relays signaling only — data never transits it. Monorepo, four applications plus shared packages:
 
-DropVoice sends voice-to-text input from a mobile phone to a PC over LAN. It is a monorepo with four applications:
+- **`apps/desktop`** — Tauri 2 app: Rust backend (`src-tauri/`, crate `dropvoice-desktop`) hosting the WebRTC answerer + Enigo keyboard injection; React 19 frontend.
+- **`apps/mobile`** — standalone Vite + React 19 PWA: the phone-side typing surface, DataChannel offerer.
+- **`apps/pairing-server`** — Rust rendezvous (axum 0.8 + sqlx 0.8/SQLite) for LAN address lookup over public HTTPS.
+- **`apps/landing`** — static marketing site built from the product's own design system (`@dropvoice/ui` + `@dropvoice/i18n`).
+- **`packages/{core,i18n,ui}`** — pure-TS state machines/atoms/types, 4-locale i18n, design system.
 
-- **`apps/desktop`** — Tauri 2 desktop app (Rust backend in `src-tauri/`, React 19 frontend in `src/`). WebRTC DataChannel P2P answerer (phone = offerer; public pairing-server relays signaling); receives text and injects it via keyboard simulation.
-- **`apps/mobile`** — Standalone Vite + React 19 PWA. The phone-side typing surface; WebRTC DataChannel P2P offerer — connects to desktop via DataChannel (signaling relayed by the public pairing-server).
-- **`apps/pairing-server`** — Rust (axum 0.8 + sqlx 0.8/SQLite) rendezvous server for LAN address lookup over public HTTPS.
-- **`apps/landing`** — Vite + React 19 static marketing site (:5175 dev). Consumes `@dropvoice/ui` (tokens, Card/QRCode/DeviceSelector, LiquidBackground) and `@dropvoice/i18n` (`landing` namespace) so the page is built from the product's own design system, not a parallel one. Facts/version constants live in `src/lib/site.ts`.
-
-Shared packages: `packages/core` (state machines, atoms, types), `packages/i18n` (4 locales), `packages/ui` (design system primitives).
+Subtree-specific orders live in each subtree's `AGENTS.md`. Full structure tree, tech-stack versions, configuration single-source table, pairing flow, event bus, and ports: [docs/architecture.md](docs/architecture.md).
 
 ## Commands
 
-All commands run from the repo root unless noted. The project uses **pnpm** (>=11) and **Cargo workspaces**.
+pnpm (>=11) + Cargo workspaces, run from the repo root. The zero-config entry is the VS Code tasks in `.vscode/tasks.json` — `dev:full` (desktop + pairing-server + mobile, bound to `Alt+R`), `dev:desktop`, `dev:pairing-server`, `dev:mobile`, `accept:*`; all env is baked into the task config. CLI equivalents plus build/deploy/migration procedures: [docs/development.md](docs/development.md).
 
-### Development
+- `pnpm doctor` — toolchain + prek hooks + ports health check; run it after a fresh clone.
+- `pnpm dev:tauri` / `pnpm dev:mobile` / `pnpm dev:landing` — dev servers (export `PAIRING_SERVER_URL` / `VITE_API_PROXY_TARGET` per docs/development.md).
+- `pnpm build:tauri` — production desktop installer (MSI/NSIS/dmg/deb).
 
-One command per environment; required env vars are baked into `.vscode/tasks.json`
-(Run Task → `dev:full` starts all three services; nothing else to configure):
+## Quality gate
 
-| Task                 | What it runs                                                               |
-| -------------------- | -------------------------------------------------------------------------- |
-| `dev:full`           | desktop + pairing-server + mobile in parallel                              |
-| `dev:desktop`        | `pnpm dev:tauri` with `PAIRING_SERVER_URL=http://localhost:38424` built in |
-| `dev:pairing-server` | `cargo run` → :38424 with `ENABLE_DOCS=true` (config: `config.local.toml`) |
-| `dev:mobile`         | `pnpm dev:mobile` → :5174 (`/api` proxied to :38424 by default)            |
-| `accept:desktop`     | desktop against the acceptance container (`PAIRING_SERVER_URL=:8080`)      |
-| `accept:mobile`      | mobile with `/api` proxied to the acceptance container (`:8080`)           |
+**prek is the single source of format, lint, and test gating** — workspace mode, root `prek.toml` plus one per project. AI post-edit hooks run `prek run --group format --files <edited>`; AI Stop hooks run `prek run --group lint --all-files`; commit → pre-commit stage; push → pre-push stage; CI → both (`pnpm quality`). Groups: `format` (fixers), `lint` (read-only), `check` (structure, drift, tests). Never `--no-verify`; never bypass a gate. Details: [docs/development.md](docs/development.md#quality-gate-prek-single-source-of-truth).
 
-CLI equivalents (when not using VS Code): `pnpm dev:tauri`, `pnpm dev:mobile`,
-`pnpm dev:landing` (→ :5175), `cargo run --manifest-path apps/pairing-server/Cargo.toml`
-— export `PAIRING_SERVER_URL=http://localhost:38424` for the desktop process (see
-root `.env.example`). After a fresh clone, run `pnpm doctor` to check toolchain,
-prek hooks, dev config and ports in one shot.
+Generated/lock files are exempt from every fixer and guarded by drift gates instead: `design-sync`, `openapi-drift`, `lockfiles-fresh`, `agents-sync`, and `doc-check` (`pnpm docs:check` — dv-rfcs format, doc pairs, budgets, links).
 
-### OpenAPI docs (pairing-server)
+## Code style
 
-```bash
-cargo run -p dropvoice-pairing-server --bin gen-openapi   # Regenerate docs/openapi.{json,yaml}
-```
+- Rust: typed errors via thiserror — `AppError` enum + `error_code()`, `AppResult = Result<T, AppError>`; module docs with `//!`.
+- TypeScript: pure reducers for state machines, no side effects; shared state in `@dropvoice/core` jotai atoms.
+- Naming: Rust `snake_case`/`PascalCase`; TS `camelCase`/`PascalCase` with co-located `*.test.ts(x)`; Tauri commands `snake_case`, invoked as `invoke::<ReturnType>("snake_case_name")`.
+- Worked examples: [docs/development.md](docs/development.md#code-style).
 
-- Docs are generated by utoipa 5 (compile-time) from `#[utoipa::path]` / `#[derive(ToSchema)]` annotations.
-- Regenerate + commit `docs/openapi.{json,yaml}` whenever the API surface changes.
-- Drift detection: `tests/openapi.rs` compares regenerated specs byte-for-byte against committed files; runs in `cargo test` and via the `openapi-drift` prek hook on any `apps/pairing-server/` change.
-- Interactive Swagger UI mounts at `/docs/swagger-ui` only when `ENABLE_DOCS=true` (env-only debug toggle, not a TOML key; default off, set by the dev task and the acceptance compose).
+## Git workflow
 
-### Quality gate (prek — single source of truth)
-
-All quality gating lives in **prek** (workspace mode): the root `prek.toml` plus one
-`prek.toml` per project (`apps/desktop`, `apps/landing`, `apps/mobile`,
-`apps/pairing-server`, `packages/{core,i18n,ui}`). CI, git hooks and the AI-tool
-hooks all invoke prek — no parallel lint/format definition exists anywhere else.
-
-```bash
-prek install            # once per clone: pre-commit + pre-push + commit-msg hooks
-prek run --all-files    # format + lint + gates (pre-commit stage)
-prek run --stage pre-push --all-files   # tests (pre-push stage)
-pnpm quality            # alias for both of the above
-pnpm test:e2e           # Playwright e2e (root e2e/ dir; also a CI job)
-```
-
-Hook **groups** (orthogonal to stages):
-
-- `format` — mutating fixers with auto-fix on (prettier --write, oxlint --fix, cargo fmt, builtin whitespace/EOF fixers)
-- `lint` — read-only gates (oxlint, tsc --noEmit, cargo clippy -D warnings)
-- `check` — structural checks, generated-file drift, lockfile freshness (pre-commit stage); vitest + cargo test (pre-push stage)
-
-Invocation map: AI post-edit hooks run `prek run --group format --files <edited>`;
-AI Stop hooks run `prek run --group lint --all-files`; commit → pre-commit stage;
-push → pre-push stage; CI → both `prek run --all-files` and `prek run --stage
-pre-push --all-files` (`.github/workflows/quality.yml`), plus a Windows/macOS
-desktop-Rust matrix for platform-specific coverage and a Playwright e2e job.
-
-Generated/lock files are exempt from every fixer and guarded by drift gates
-instead: `packages/ui/src/tokens/theme.css` (`check_design_sync.py`, fix:
-`pnpm design:sync`), `apps/pairing-server/docs/openapi.{json,yaml}`
-(`openapi-drift` hook, fix: `gen-openapi`), `pnpm-lock.yaml`/`Cargo.lock`
-(`check_lockfiles.py`, fix: `pnpm install --lockfile-only` + any cargo command),
-`CLAUDE.md` (`sync-agents.py`, fix: `cp AGENTS.md CLAUDE.md`).
-
-### Build
-
-```bash
-pnpm build:tauri        # Production desktop installer (MSI/NSIS/dmg/deb)
-pnpm ci:build           # Same as build:tauri (CI alias)
-```
-
-### Lint / Format (individual, for humans — prek wraps these)
-
-```bash
-pnpm lint               # oxlint (all @dropvoice/* packages)
-pnpm lint:fix           # oxlint --fix
-pnpm format             # prettier --write
-pnpm format:check       # prettier --check
-cargo fmt               # Rust format (workspace root covers all crates)
-cargo clippy --workspace -- -D warnings   # Rust lint, all crates
-```
-
-### Database migrations (pairing-server)
-
-```bash
-# Install sqlx-cli once:
-cargo install sqlx-cli --no-default-features --features sqlite,rustls
-
-sqlx migrate add -r <description>    # Create reversible migration (.up.sql + .down.sql)
-sqlx migrate add <description>       # Create simple migration (.sql, default)
-sqlx migrate info                    # Show migration status
-sqlx database create                 # Create dev database
-# Migrations apply automatically at server startup via sqlx::migrate!() - no manual run needed.
-```
-
-### Deploy pairing-server (Windows / containerized ansible)
-
-Windows cannot run ansible natively (POSIX fork/sh dependency), so deployment
-runs ansible inside a throwaway Linux container (`docker run --rm`). The runner
-image is a local-only tool — not pushed — built on first run and cached after.
-`devops/deploy.py` (Python, cross-platform) drives this; `deploy.{sh,ps1}` were
-removed. `ansible.cfg` lives at the repo root (inventory + ssh tuning), so the
-playbook command needs no `-i` flags: `ansible-playbook
-apps/pairing-server/devops/ansible/deploy.yml -l <env>`.
-
-Environments (single playbook, differences confined to `group_vars/<env>.yml`):
-
-- **local dev acceptance** — not deployed. Two forms:
-  - dev loop: VS Code task `dev:full` (= pairing-server `cargo run` → :38424 +
-    desktop + mobile); phone opens `http://<dev-ip>:5174` (vite proxies `/api`
-    to :38424). `PAIRING_SERVER_URL` is set by the task, not by hand.
-  - container acceptance (artifact): `pnpm accept:up` (HTTP :8080, config from
-    the committed `docker/config.acceptance.toml`); desktop/mobile via the
-    `accept:desktop` / `accept:mobile` tasks.
-- **staging** = fn @ 192.168.5.200 — dogfooding; HTTPS terminated externally by
-  the intranet tunnel (`dropvoice.bytehome.fun`, ops-managed, not in this repo).
-  Deploys the rolling `main` tag from the LAN registry; Caddyfile is a plain
-  copy of `docker/Caddyfile` (HTTP form).
-- **production** — public VPS, Cloudflare-only origin (`:4443`, Origin CA
-  cert). Deploys pinned version tags from Docker Hub (CI publishes releases to
-  both ghcr.io and Docker Hub; prod pulls the public Docker Hub image, no
-  registry login on the VPS). Caddyfile is the TLS template
-  `templates/Caddyfile.production.j2`.
-
-Image tag semantics:
-
-| Tag                    | Registry                     | Points at                                           | Moved by                             |
-| ---------------------- | ---------------------------- | --------------------------------------------------- | ------------------------------------ |
-| `main`                 | 192.168.5.50:5000 (LAN only) | whatever the local workspace last built             | `docker/build.py --push`             |
-| `0.1.3` / `0.1.3-rc.1` | ghcr.io + Docker Hub         | git tag `v0.1.3` / `v0.1.3-rc.1`                    | CI `docker-publish.yml` on `v*` push |
-| `latest`               | ghcr.io + Docker Hub         | newest **stable** release only (never a prerelease) | CI `docker-publish.yml`              |
-
-Stability gate: exact `^v\d+\.\d+\.\d+$` moves `latest`. Prereleases use the
-hyphenated semver form (`v0.1.3-rc.1`, never `v0.1.3rc1`). CI multi-platform
-builds use native runners (amd64 + arm64, no QEMU); local cross-platform builds
-go through buildx + QEMU. `main` is never built by CI.
-
-Build → deploy → accept flow (all from the dev machine):
-
-```bash
-# 1. Build image (single self-contained artifact: backend + Caddy + baked-in PWA).
-#    Defaults: LAN registry, host-machine platform, tags = main (+ --tags extras,
-#    deduplicated). No registry cache by design (zero local gain, registry bloat).
-pnpm image:push                                                       # -> LAN registry, tag: main
-python apps/pairing-server/docker/build.py --push --all-platforms --tags v0.3.0  # cross-arch + immutable tag
-pnpm build:tauri                                                      # desktop installer -> local install
-
-# 2. Local container acceptance (against the artifact, before any deploy).
-#    Plain HTTP :8080 — no TLS on the local box (this machine's WSL2 breaks
-#    Go TLS servers; deployed forms terminate TLS externally anyway).
-pnpm accept:up        # compose up (config: committed docker/config.acceptance.toml)
-pnpm accept:test      # e2e-caddy (--ignored) + scripts/smoke.py http://localhost:8080
-pnpm accept:down      # compose down -v (clean slate)
-
-# 3. Deploy staging. The playbook renders config.toml + compose + Caddyfile from
-#    group_vars, then runs scripts/smoke.py against public_url (health + PWA +
-#    round trip + version match via /health APP_VERSION), so a green deploy
-#    already passed the smoke gate.
-pnpm deploy:staging                    # deploys `main` tag
-pnpm deploy:staging -- --tag v0.3.0    # pin / rollback to immutable tag
-python apps/pairing-server/devops/deploy.py staging --check --diff   # dry-run preview
-```
-
-Human acceptance gate before production promotion: `apps/pairing-server/devops/runbooks/accept-staging.md`.
-
-Mounts: repo root → `/workspace` (playbook edits live, no image rebuild; the
-repo-root ansible.cfg applies from this workdir), `~/.ssh` → `/ssh`
-(entrypoint copies keys + chmod 600 for Windows perms), `~/.ansible-vault` →
-`/vault`. See `apps/pairing-server/devops/runner/` and `devops/deploy.py`.
-
-Prerequisites (once): vault password file at `~/.ansible-vault/dropvoice-<env>.pwd`
-(e.g. `dropvoice-staging.pwd`); repo secrets `DOCKERHUB_USERNAME` /
-`DOCKERHUB_TOKEN` for CI image publishing (ghcr.io uses the built-in GITHUB_TOKEN).
-
-### Git hooks (setup once per clone)
-
-```bash
-prek install            # Install git hooks (pre-commit + pre-push + commit-msg)
-prek run --all-files    # Run all hooks manually
-```
-
-### AI tool hooks (thin prek wrappers)
-
-`.claude/`, `.zcode/`, `.codex/` and `.opencode/` carry no lint/format logic of
-their own — their hooks are disposable adapters over prek:
-
-- PostToolUse (Edit|Write|ApplyPatch) → `prek run --group format --files <edited>`
-  (never blocks; exit 0/1 both acceptable)
-- Stop → `prek run --group lint --all-files`, blocking with diagnostics on failure
-  (OpenCode has no blocking Stop channel — it falls back to the pre-commit gate + CI)
-
-Per-tool differences are payload parsing only (snake_case vs camelCase keys).
-If a formatter/linter behavior needs changing, edit `prek.toml` — never the adapters.
-
-### Versioning & release
-
-```bash
-pnpm version:patch      # Bump patch + sync versions across packages + changelog
-pnpm version:minor
-pnpm version:major
-# Release: push tag `v*` -> release.yml builds all platforms automatically,
-# docker-publish.yml publishes the pairing-server image (ghcr.io + Docker Hub).
-```
-
-## Project Structure
-
-```
-apps/
-  desktop/
-    src-tauri/          Rust backend (crate: dropvoice-desktop)
-      src/
-        commands/       Tauri commands: server.rs, settings.rs, window.rs
-        server/         仅 auth（配对码 + 连接令牌生成/校验）
-        connection.rs   ConnectionManager：WebRTC 客户端跟踪 + Enigo 注入队列
-        config/         DropVoiceConfig (config.toml; no migration — unknown TOML fields are ignored)
-        network/        heartbeat, pairing_client
-        text/           injector.rs (enigo keyboard injection, EnigoInjector + MockInjector)
-        telemetry/      logging.rs, metrics.rs
-        lib.rs          Tauri Builder setup, 8 plugins, system tray, invoke_handler
-        main.rs         Entry stub
-    src/                React 19 frontend
-      App.tsx           QueryClientProvider + JotaiProvider, auto-starts server + event-bus 订阅
-      hooks/            useServerState, useAppSettings, useAutoUpdate, useWebRTC
-      components/       HeaderBar, PairingView, PairingContent, ConnectedStatusCard,
-                        LanWarningBanner, SettingsDialog
-      lib/invoke.ts     Typed Tauri invoke wrapper
-  mobile/
-    src/                React 19 PWA
-      App.tsx           Multi-device manager, QR-scan pairing, send modes
-      components/       MobileHeader, DeviceSelectorPanel, TextInputPanel, AddDeviceModal, ...
-      hooks/            useDraft, useConnections
-      lib/              rtcTransport.ts, storage.ts
-  pairing-server/
-    src/                axum 0.8 + sqlx 0.8
-      api/              mod (router), auth, devices, pairing_codes, error, rate_limit, state
-      store/            mod (open_pool), device_repo, pairing_code_repo
-      domain/           device, pairing_code (pure data structs)
-      batch/            BatchWriter (coalesced status writes)
-      cache/            in-memory token + pairing-code cache
-      config.rs         Time constants + runtime Config
-      observability.rs  Metrics, tracing init
-      main.rs           Startup: tracing -> config -> pool+migrate -> tasks -> serve
-    migrations/         sqlx migrations (timestamp-prefixed: YYYYMMDDHHMMSS_name.sql)
-    docker/             Multi-stage Dockerfile (cargo-chef), s6-overlay, Caddy; build.py
-    devops/             deploy.py, ansible/ (playbook + group_vars + templates), runner/
-  landing/
-    src/                React 19 静态营销页（Liquid Glass，复用 @dropvoice/ui）
-      sections/         Hero, HowItWorks, PrivacySection, MultiDeviceSection,
-                        SelfHostSection, FaqSection, FinalCta, Footer, FactsLine
-      demo/             Hero 活体演示：script.ts（纯函数时间线，有测试）+ DemoStage
-      components/       Nav, QrPopover, ScenarioTabs, SectionKicker
-      lib/site.ts       站点常量（repo/releases/PWA URL/version）— 改链接只动这里
-packages/
-  core/                 Pure-TS: state machines (reducers, NOT xstate), jotai atoms, types, hooks
-  i18n/                 i18next: en, zh, zh-TW, ja x {common,devices,errors,landing,settings}
-  ui/                   Design system: primitives, composite, layout; Tailwind v4 tokens
-specs/                  Design specs (specs/full/) - READ ONLY, do not edit
-e2e/                    Playwright e2e tests + config
-scripts/                Cross-platform (Python by default) tooling: smoke.py,
-                        sync-agents.py, check_lockfiles.py, check_design_sync.py,
-                        sync-version.js, generate-*.js (sharp), clone-contexts.ps1
-```
-
-Every project above (`apps/*`, `packages/*`) also carries a `prek.toml` —
-prek workspace mode runs their hooks at that directory with project-relative
-paths; the root `prek.toml` covers repo-level files and cross-cutting gates.
-
-### Tech stack (exact versions)
-
-- **React** 19.0.0, **TypeScript** 5.9.0, **Vite** 6.4.0
-- **Tauri** 2 (API ^2.10.0, CLI ^2.8.0, 8 plugins)
-- **Rust** edition 2021, MSRV **1.93** (`rust-version` in workspace Cargo.toml)
-- **axum** 0.8 (ws feature; **pairing-server only** — desktop does not depend on axum), **sqlx** 0.8 (sqlite, migrate, macros, chrono; bundled libsqlite3)
-- **tower-http** 0.7 (trace, cors, fs; **pairing-server only**), **tokio** 1 (full)
-- **Tailwind CSS** 4.2.0, **jotai** 2.18, **@tanstack/react-query** 5.90
-- **enigo** 0.6 (keyboard injection), **directories** 6 (path resolution)
-- **vitest** 4.1, **@playwright/test** 1.49+, **oxlint** 0.15, **prettier** 3.6
-- **Node** >=22, **pnpm** >=11 (packageManager pnpm@11.0.0)
-
-## Code Style
-
-### Rust - typed errors via thiserror
-
-```rust
-// Pattern: AppError enum with error_code(), AppResult = Result<T, AppError>
-// apps/desktop/src-tauri/src/error.rs
-#[derive(Debug, thiserror::Error)]
-pub enum AppError {
-    #[error("server already running")]
-    ServerAlreadyRunning,
-    #[error("max devices reached")]
-    MaxDevicesReached,
-}
-
-impl AppError {
-    pub fn error_code(&self) -> &'static str {
-        match self {
-            Self::ServerAlreadyRunning => "SERVER_ALREADY_RUNNING",
-            Self::MaxDevicesReached => "MAX_DEVICES",
-        }
-    }
-}
-
-pub type AppResult<T> = Result<T, AppError>;
-```
-
-### TypeScript - pure reducers for state machines
-
-```typescript
-// packages/core/src/machines/connection.ts - pure functions, no side effects (spec 02 section 5.3)
-export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'error';
-export type ConnectionEvent = { type: 'CONNECT' } | { type: 'OPEN' } | { type: 'CLOSE' };
-
-export function connectionReducer(state: ConnectionState, event: ConnectionEvent): ConnectionState {
-  switch (event.type) {
-    case 'CONNECT':
-      return state === 'idle' ? 'connecting' : state;
-    case 'OPEN':
-      return state === 'connecting' ? 'connected' : state;
-    case 'CLOSE':
-      return 'idle';
-  }
-}
-```
-
-### Naming conventions
-
-- Rust: `snake_case` for functions/variables, `PascalCase` for types. Module-level docs with `//!`.
-- TypeScript: `camelCase` for variables/functions, `PascalCase` for types/components. Co-located tests as `*.test.ts(x)`.
-- Tauri commands: `snake_case` function names, exposed to frontend via `invoke::<ReturnType>("snake_case_name")`.
-
-## Git Workflow
-
-- **Conventional Commits** enforced by commitlint (types: feat, fix, docs, style, refactor, perf, test, chore, revert).
-- Example: `feat(desktop): add connection token persistence`
-- Scope convention: `(desktop)`, `(mobile)`, `(pairing-server)`, `(core)`, `(ui)`, `(i18n)`, `(ci)`, `(docs)`.
-- Versioning: `pnpm version:patch|minor|major` bumps root + syncs all packages + regenerates CHANGELOG.
-- Release: push a `v*` tag -> `.github/workflows/release.yml` builds Windows/macOS/Linux bundles + creates GitHub release.
+- Conventional Commits, commitlint-enforced: `feat|fix|docs|style|refactor|perf|test|chore|revert`.
+- Scopes: `(desktop)`, `(mobile)`, `(pairing-server)`, `(core)`, `(ui)`, `(i18n)`, `(ci)`, `(docs)`.
+- Versioning: `pnpm version:patch|minor|major` bumps and syncs everything. Release: push a `v*` tag → `release.yml` builds all platforms; `docker-publish.yml` publishes the pairing-server image.
 
 ## Boundaries (do NOT directly edit)
 
-1. **`specs/`** - design specifications are read-only. Propose changes via discussion, never edit in place.
-2. **Generated files** - regenerate, never hand-edit:
-   - `packages/ui/src/tokens/theme.css` from `DESIGN.md` via `pnpm design:sync` (drift gate: `check_design_sync.py`).
-   - `apps/pairing-server/docs/openapi.{json,yaml}` via `cargo run -p dropvoice-pairing-server --bin gen-openapi` (drift gate: `openapi-drift` hook; LF pinned in `.gitattributes` for the byte-compare).
-3. **Lock files** - `pnpm-lock.yaml` / `Cargo.lock` are written by the package managers only. `Cargo.lock` pins sqlx 0.8 for the rustc 1.93 toolchain constraint (sqlx 0.9 needs 1.94+). Freshness is gated by `check_lockfiles.py`.
-4. **`AGENTS.md` vs `CLAUDE.md`** - `AGENTS.md` is the source; `CLAUDE.md` must be an identical copy. Edit `AGENTS.md`, then `cp AGENTS.md CLAUDE.md`. The prek `agents-sync` hook rejects commits where they differ.
-5. **Secrets** - never commit. App config goes in TOML files (local configs are gitignored, `*.example.toml` templates are committed); env vars are escape hatches only (see "Configuration architecture"). CI image publishing needs `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repo secrets.
+1. `specs/` — approved design specs are read-only; propose changes via discussion, never in place.
+2. Generated files — regenerate, never hand-edit: `packages/ui/src/tokens/theme.css` (`pnpm design:sync`), `apps/pairing-server/docs/openapi.{json,yaml}` (`cargo run -p dropvoice-pairing-server --bin gen-openapi`).
+3. Lock files — `pnpm-lock.yaml` / `Cargo.lock` are written by package managers only.
+4. Agent instruction files — `AGENTS.md` is the source at every level; each `CLAUDE.md` is a byte-identical copy; `.claude/skills/` mirrors `.agents/skills/`. Rebuild all mirrors with `python scripts/sync_agent_files.py`; the `agents-sync` gate rejects drift.
+5. Secrets — never commit. App config goes in TOML files (local configs gitignored, `*.example.toml` templates committed); env vars are escape hatches. CI image publishing needs `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repo secrets.
 
-## Key Conventions
+## Key conventions
 
-### Workspace dependency inheritance
+- Workspace dependency inheritance: shared versions are declared at the workspace root; members inherit via `workspace = true` (Cargo) / `workspace:*` (pnpm). Never pin inline what the root declares.
+- Configuration: every knob has exactly one source of truth — the [single-source table](docs/architecture.md#configuration-single-sources).
+- The pairing flow (QR → offer via pairing-server → Rust signaling supervision → DataChannel → Enigo injection) and the [connection-state event bus](docs/architecture.md#desktop-connection-state-event-bus) are documented in docs/architecture.md. Data is P2P; no server port carries it.
+- i18n: 4 locales (`en`, `zh`, `zh-TW`, `ja`) × 5 namespaces in `packages/i18n/locales/`; detection `?lang=` → localStorage `dropvoice-lang` → navigator.
+- AI tool hooks: `.claude/`, `.zcode/`, `.codex/`, `.opencode/` are disposable adapters over prek — change gating in `prek.toml`, never the adapters.
 
-Both Cargo and pnpm workspaces centralize versions at the root. Member crates/packages inherit via `workspace = true` (Cargo) or `workspace:*` (pnpm). Never pin a version inline in a member if the root declares it - this caused axum 0.7/0.8 divergence before. When adding a shared dependency, add it to the root `[workspace.dependencies]` first.
+## Documentation & decision records
 
-### Configuration architecture (single sources)
+Documentation follows [docs/AGENTS.md](docs/AGENTS.md): one fact, one home; current state, not change history; bilingual pairs for prose pages ([development](docs/development.md), [architecture](docs/architecture.md)); English for agent instructions; word budgets for `AGENTS.md` files; links must resolve.
 
-Env vars are a last resort; every knob has exactly one source of truth:
+Decision rationale lives in [DV-RFCs](.agents/dv-rfcs/README.md) (`.agents/dv-rfcs/`): every non-trivial change adds or updates a record in the same change — the why, the alternatives that lost, the consequences. Only purely mechanical edits with no change to behavior, contracts, structure, process, or rationale are exempt.
 
-| Concern                       | Single source                                                                                                                    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Desktop → pairing-server URL  | `config.toml` `network.pairing_server_url` (user file `<config_dir>/dropvoice/config.toml`, default `https://api.dropvoice.app`) | Resolved in Rust (`pairing_client::resolve_base_url`); the webview fetches it at runtime via the `get_signaling_url` command — no build-time injection, no second env var. `PAIRING_SERVER_URL` env exists only as the dev-orchestration override, set by `.vscode/tasks.json`. CSP `connect-src` is scheme-open (`http: https:`) because the target is runtime-configurable. `PAIRING_SERVER_INSECURE=1` skips TLS verification on the Rust HTTP leg only (self-signed escape hatch, never in prod).                                                |
-| pairing-server app config     | TOML file probed at `/app/config.toml` (container) then `apps/pairing-server/config.local.toml` (bare `cargo run`)               | Templates: `config.local.toml.example` (dev, committed), `docker/config.acceptance.toml` (acceptance, committed), `docker/config.example.toml` (self-deploy copy source), `devops/ansible/templates/config.toml.j2` (rendered from `group_vars`; cors_origins derived from `public_url` + fixed tauri origins). A present-but-broken config file fails startup (no silent fallback to defaults). Env vars (`LISTEN_ADDR` etc.) remain as escape hatches only; compose/ansible pass `RUST_LOG`/`LOG_DIR` and the env-only debug toggle `ENABLE_DOCS`. |
-| Caddy routing                 | `docker/Caddyfile` (HTTP form)                                                                                                   | Baked into the image, mounted by acceptance, copied verbatim to staging. Production TLS variant: `templates/Caddyfile.production.j2` — routing mirrors the shared file.                                                                                                                                                                                                                                                                                                                                                                              |
-| Per-environment deploy values | `devops/ansible/group_vars/<env>.yml`                                                                                            | Rendered into `config.toml`, `docker-compose.yml` and the Caddyfile by `deploy.yml`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Mobile API base               | none — PWA is always same-origin with the API (dev: Vite proxy; deployed: Caddy same-host reverse proxy)                         | Dev proxy target via `VITE_API_PROXY_TARGET` (default `localhost:38424`; acceptance `:8080` set by the `accept:mobile` task). No build-time API-base variable exists.                                                                                                                                                                                                                                                                                                                                                                                |
+## Editing these instructions
 
-One-command entries: VS Code tasks (`.vscode/tasks.json`) for long-running dev
-services, pnpm scripts (`doctor`, `accept:up/test/down`, `image:push`,
-`deploy:*`) for one-shot pipelines. Root `.env.example` is documentation only —
-nothing loads `.env` files automatically.
-
-### Pairing flow (WebRTC signaling, spec 11)
-
-1. Desktop `start_server` issues a local pairing code (in-memory) + starts heartbeat (registers with public pairing-server → `pairing_token`).
-2. Mobile scans QR (`dropvoice://pair?code=&device=&name=`), POSTs a WebRTC offer (`POST /api/devices/{id}/webrtc/offer`) to the pairing-server.
-3. Pairing-server relays the offer to the desktop over its SSE subscription (`GET /api/devices/{id}/webrtc/events`). Desktop `validate_credential` (local code/token compare) + generates an answer.
-4. Mobile long-polls the answer (`GET .../answer/{session_id}`); on `accepted`, `setRemoteDescription` → DataChannel established.
-5. Text flows over the DataChannel; desktop receives `{type:"text"}` → `invoke inject_text` (Enigo keyboard injection). Desktop issues a connection `token` over the channel; mobile reconnects with `token` thereafter.
-
-Both desktop legs (Rust heartbeat registration + webview SSE) resolve the
-server URL through the same single source — see "Configuration architecture"
-above — so they can never diverge.
-
-Full details in the configuration spec (`specs/full/01-configuration.md`) and the signaling code (`apps/desktop/src/lib/signaling.ts`, `apps/mobile/src/lib/rtcTransport.ts`).
-
-### 桌面连接态事件总线（connection-state event bus）
-
-Desktop backend pushes Tauri events to decouple "when to rotate/reconnect" (backend) from "how to render" (frontend). A 1s `get_connection_info` poll remains as fallback for `active_connections`/`clients`/`queue_depth`.
-
-| Event                  | Payload                | Trigger                                              | Consumer                                                    |
-| ---------------------- | ---------------------- | ---------------------------------------------------- | ----------------------------------------------------------- |
-| `pairing_code_rotated` | `{ code, qr_payload }` | Pairing-code rotation timer (§6)                     | Desktop frontend: update QR/link/reconnect-code immediately |
-| `client_registered`    | `{ client_id }`        | `register_client` command success (DataChannel open) | Desktop frontend: close the "add device" overlay (§1)       |
-
-`client_unregistered` has no consumer (YAGNI) and is not emitted.
-
-### i18n
-
-4 locales (`en`, `zh`, `zh-TW`, `ja`) x 5 namespaces (`common`, `devices`, `errors`, `landing`, `settings`) = 20 JSON files in `packages/i18n/locales/`. Detection: querystring `?lang=` -> localStorage `dropvoice-lang` -> navigator. The `landing` namespace is the marketing site copy (apps/landing).
-
-### Ports
-
-| Service                                                 | Port  |
-| ------------------------------------------------------- | ----- |
-| Desktop frontend (Vite dev)                             | 5173  |
-| Mobile PWA (Vite dev)                                   | 5174  |
-| Landing page (Vite dev)                                 | 5175  |
-| Pairing/signaling server (axum, public HTTPS via Caddy) | 38424 |
-
-> WebRTC 架构下，数据经 P2P DataChannel 直连，不经任何服务器端口。
-> 桌面不再绑定本地 axum HTTP/WS 服务器或 UDP 发现 —— 均已删除。
+Root and subtree `AGENTS.md` files are standing orders; subtree files supplement this one and never repeat it. Keep each rule 1–3 lines, linking its home instead of restating it. Word ceilings live in `scripts/doc_budgets.manifest.json`; on red: relocate to the owning tier, condense, raise the ceiling last with a justified diff. After editing any `AGENTS.md`, `CLAUDE.md`, or skill, run `python scripts/sync_agent_files.py`.

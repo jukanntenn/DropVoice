@@ -92,13 +92,14 @@ stages = ["pre-commit"]
 
 # ---- check group: generated-file + sync gates ----
 
-# AGENTS.md == CLAUDE.md (byte-for-byte); fix: cp AGENTS.md CLAUDE.md
+# AGENTS.md == CLAUDE.md at every level (byte-for-byte) + .claude/skills mirrors
+# .agents/skills; fix: python scripts/sync_agent_files.py
 [[repos.hooks]]
 id = "agents-sync"
 name = "AI tool configs in sync"
 language = "system"
 entry = "python scripts/sync-agents.py"
-files = "^(AGENTS|CLAUDE)\\.md$"
+files = "(^|/)(AGENTS|CLAUDE)\\.md$|^\\.agents/skills/|^\\.claude/skills/"
 pass_filenames = false
 groups = ["check"]
 stages = ["pre-commit"]

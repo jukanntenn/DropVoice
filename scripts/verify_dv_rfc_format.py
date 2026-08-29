@@ -32,7 +32,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RFC_ROOT = REPO_ROOT / ".agents" / "dv-rfcs"
 
 LIFECYCLES = ("implemented", "proposed", "rejected")
-CONTRACT_FILES = {"AGENTS.md", "README.md", "README.zh.md"}
+CONTRACT_FILES = {"AGENTS.md", "CLAUDE.md", "README.md", "README.zh.md"}
 KEEPERS = {".gitkeep"}
 
 FILENAME = re.compile(r"^(\d{4})-(\d{2})-(\d{2})-[a-z0-9][a-z0-9-]*(\.zh)?\.md$")
@@ -58,13 +58,13 @@ def strip_fences(text: str) -> str:
     fence = None
     for line in text.split("\n"):
         stripped = line.lstrip()
-        if fence is None and (stripped.startswith("```") or stripped.startswith("~~~")):
-            fence = stripped[:3]
-            continue
-        if fence is not None and stripped.startswith(fence):
+        if fence is None:
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                fence = stripped[:3]
+            else:
+                out.append(line)
+        elif stripped.startswith(fence):
             fence = None
-            continue
-        out.append(line)
     return "\n".join(out)
 
 

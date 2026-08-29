@@ -18,10 +18,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import verify_doc_budgets  # noqa: E402
+import verify_doc_pairs  # noqa: E402
 import verify_dv_rfc_format  # noqa: E402
+import verify_md_links  # noqa: E402
 
 GATES = [
     ("verify_dv_rfc_format", verify_dv_rfc_format),
+    ("verify_doc_pairs", verify_doc_pairs),
+    ("verify_doc_budgets", verify_doc_budgets),
+    ("verify_md_links", verify_md_links),
 ]
 
 

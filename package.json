@@ -34,6 +34,7 @@
     "design:sync": "pnpm design:lint && pnpm design:export:css",
     "quality": "prek run --all-files && prek run --stage pre-push --all-files",
     "docs:check": "python scripts/doc_sync.py",
+    "docs:fix": "python scripts/sync_agent_files.py",
     "doctor": "python scripts/doctor.py",
     "ci:build": "pnpm build:tauri",
     "version:patch": "pnpm version patch && pnpm version:sync",
