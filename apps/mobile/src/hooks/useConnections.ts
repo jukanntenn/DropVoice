@@ -349,12 +349,23 @@ export function useConnections(): UseConnectionsReturn {
     return count;
   }, []);
 
-  // visibilitychange → 前台时立即重试所有 reconnecting/offline 设备（不等退避）。
+  // visibilitychange → 前台对账：非 connected/idle 且 transport 未 open 的会话
+  // 立即重试（不等退避）。
+  //
+  // 覆盖 connecting 是关键：PWA 后台冻结可能悬挂 connect() 的 fetch/promise
+  // （transport 停留在 connecting 且无任何待触发定时器）——这是唯一无法自愈
+  // 的停留态，前台对账是它的恢复点。快速前后台切换重启一次进行中的尝试无
+  // 状态代价（CONNECT 自 connecting 是 no-op，retries 不清零也不递增）。
   useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') return;
       for (const [id, s] of sessionsRef.current.entries()) {
-        if (s.state.status === 'reconnecting' || s.state.status === 'offline') {
+        const stale =
+          (s.state.status === 'connecting' ||
+            s.state.status === 'reconnecting' ||
+            s.state.status === 'offline') &&
+          !s.transport?.isOpen;
+        if (stale) {
           retryDevice(id);
         }
       }

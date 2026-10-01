@@ -236,6 +236,52 @@ describe('useConnections (§9 重写)', () => {
     expect(result.current.statuses['dev-1']).toEqual({ status: 'connected' });
   });
 
+  // 前台对账（visibilitychange）：PWA 冻结悬挂在 connecting 的会话，回到前台
+  // 必须重开 transport——这是 connecting 停留态唯一的自愈路径。
+  it('前台对账：connecting 且 transport 未 open → 重建 transport（悬挂恢复）', () => {
+    setToken('dev-1', 'dvct_tok');
+    const { result } = renderHook(() => useConnections());
+    act(() => result.current.connectDevice(DEVICE));
+    expect(result.current.statuses['dev-1']).toEqual({ status: 'connecting', retries: 0 });
+    const t1 = lastTransport();
+    const created = instances.length;
+
+    // 回到前台：connecting + transport 未 open → 重开。
+    act(() => {
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'visible',
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(instances.length).toBe(created + 1);
+    expect(result.current.statuses['dev-1']).toEqual({ status: 'connecting', retries: 0 });
+    expect(t1.openState).toBe(false);
+
+    // 新 transport open → connected（恢复路径走通）。
+    const t2 = lastTransport();
+    act(() => t2.simulateOpen());
+    expect(result.current.statuses['dev-1']).toEqual({ status: 'connected' });
+  });
+
+  it('前台对账：connected 会话与 open 中的 transport 不受影响', () => {
+    setToken('dev-1', 'dvct_tok');
+    const { result } = renderHook(() => useConnections());
+    act(() => result.current.connectDevice(DEVICE));
+    act(() => lastTransport().simulateOpen());
+    const created = instances.length;
+
+    act(() => {
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'visible',
+      });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(instances.length).toBe(created);
+    expect(result.current.statuses['dev-1']).toEqual({ status: 'connected' });
+  });
+
   it('connectDevice 幂等：已 connecting 再调用不新建 transport', () => {
     setToken('dev-1', 'dvct_tok');
     const { result } = renderHook(() => useConnections());

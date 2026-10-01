@@ -25,6 +25,10 @@ const LONG_POLL_TIMEOUT = 30_000;
 /** ICE 收集超时 fallback（§5.5 2s）。 */
 const ICE_GATHERING_TIMEOUT = 2000;
 
+/** offer POST 超时：无界 fetch 是 connecting 态唯一的悬挂点（网络黑洞 /
+ * PWA 冻结后死 socket），必须与其他步骤一样有界。 */
+const OFFER_POST_TIMEOUT = 10_000;
+
 /** offer 请求体（§4.1）。 */
 interface OfferRequestBody {
   code?: string;
@@ -168,11 +172,12 @@ export class RtcTransport implements TransportAdapter {
     }
 
     // PWA 与 API 恒同源：dev 走 Vite proxy（/api → :38424），部署形态 Caddy
-    // 同机反代——请求始终用相对路径。
+    // 同机反代——请求始终用相对路径。超时保证连接尝试必然有界终结。
     const offerResp = await fetch(`/api/devices/${deviceId}/webrtc/offer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(OFFER_POST_TIMEOUT),
     });
 
     // HTTP 错误状态 → 具名 error code（§7 含 503 DESKTOP_OFFLINE fast-fail）。
@@ -213,7 +218,12 @@ export class RtcTransport implements TransportAdapter {
     }
 
     // setRemoteDescription(answer) → ICE 协商完成 → DataChannel open。
-    await pc.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
+    // 超时包裹同 createOffer（PC 异常时 Chromium 的 promise 可能永不 settle）。
+    await this.withTimeout(
+      pc.setRemoteDescription({ type: 'answer', sdp: answer.sdp }),
+      10_000,
+      'setRemoteDescription'
+    );
     // DataChannel open 由 wireChannel 中的 onopen 触发 emit('open')。
   }
 

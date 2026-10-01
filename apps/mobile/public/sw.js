@@ -30,6 +30,11 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
+  // /api 永不缓存（信令 offer/answer 是一次性数据；网络优先回退也会把
+  // answer 长轮询响应落进 Cache Storage——无意义且占空间）。
+  const url = new URL(request.url);
+  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) return;
+
   // §9.8：WebRTC 架构无 WebSocket，删除旧的 websocket 守卫。
 
   event.respondWith(
