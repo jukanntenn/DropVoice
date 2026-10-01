@@ -51,6 +51,11 @@ chrono = { workspace = true }
 reqwest = { workspace = true }
 # dvct_ 连接令牌编码（webrtc-scan-direct-design §3.3，URL_SAFE_NO_PAD 32 字节）。
 base64 = { workspace = true }
+# 信令 + WebRTC 应答面（Rust 常驻子系统，见 network/signaling.rs、webrtc/）。
+webrtc = { workspace = true }
+eventsource-stream = { workspace = true }
+futures-util = { workspace = true }
+bytes = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_Foundation", "Win32_UI_Input_KeyboardAndMouse"] }
