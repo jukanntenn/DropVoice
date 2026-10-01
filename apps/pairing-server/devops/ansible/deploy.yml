@@ -49,19 +49,11 @@
         dest: "{{ config_file }}"
         mode: "0644"
 
-    - name: Copy Caddyfile (HTTP form, shared with image default + acceptance)
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../docker/Caddyfile"
-        dest: "{{ caddyfile }}"
-        mode: "0644"
-      when: tls_profile == 'http'
-
-    - name: Template Caddyfile (TLS form, production only)
+    - name: Template Caddyfile (three-host form; staging HTTP / production TLS)
       ansible.builtin.template:
-        src: Caddyfile.production.j2
+        src: Caddyfile.j2
         dest: "{{ caddyfile }}"
         mode: "0644"
-      when: tls_profile == 'origin'
 
     - name: Pull image (daemon-level, honors insecure-registries)
       community.docker.docker_image:
@@ -110,6 +102,8 @@
       ansible.builtin.command:
         cmd: >-
           python3 {{ playbook_dir }}/../../../../scripts/smoke.py {{ public_url }}
+          --app-url https://{{ app_domain }}
+          --api-url https://{{ api_domain }}
           --expect-version {{ smoke_expected_version | default('') }}
       delegate_to: localhost
       run_once: true

@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # dev 三件套 + 容器验收占用的端口（被占只 warn——很可能就是正在跑的服务）。
 DEV_PORTS = {
-    38424: "pairing-server（dev / 容器内 Caddy 反代目标）",
+    7380: "pairing-server（dev 裸跑，tasks.json env 注入）",
     5173: "desktop Vite dev server",
     5174: "mobile PWA dev server",
     8080: "容器验收 Caddy（pnpm accept:up）",
@@ -95,17 +95,29 @@ def check_quality_gate() -> None:
 
 
 def check_dev_prereqs() -> None:
-    print("== dev（dev:full 三件套）==")
-    local_cfg = REPO_ROOT / "apps" / "pairing-server" / "config.local.toml"
-    if local_cfg.exists():
-        report("ok", "config.local.toml 存在")
+    print("== dev（dev:full 三件套，Alt+R）==")
+    # dev 配置全部由 .vscode/tasks.json 的 env 注入（自包含）：
+    # LISTEN_ADDR / DATABASE_URL / RATE_LIMIT_PER_SEC / PAIRING_SERVER_URL /
+    # VITE_API_PROXY_TARGET。config.local.toml 不再是 dev 前置条件——env
+    # 优先级高于 TOML（见 apps/pairing-server/src/config.rs），文件仅作
+    # 裸跑（不经任务）时的可选便利。
+    tasks = REPO_ROOT / ".vscode" / "tasks.json"
+    report(
+        "ok" if tasks.exists() else "fail",
+        ".vscode/tasks.json 存在（dev 配置唯一来源）"
+        if tasks.exists()
+        else ".vscode/tasks.json 缺失 —— dev:full 无法自包含启动",
+    )
+    dev_db = REPO_ROOT / "apps" / "pairing-server" / "dev.db"
+    if dev_db.exists():
+        report(
+            "ok",
+            "apps/pairing-server/dev.db 存在（dev 数据库，已 gitignore）",
+        )
     else:
         report(
-            "warn",
-            "apps/pairing-server/config.local.toml 不存在 —— 裸跑会用内置默认值"
-            "（rate_limit=1 且 CORS 关闭，桌面 webview 直连会被浏览器拦截）",
-            "cp apps/pairing-server/config.local.toml.example"
-            " apps/pairing-server/config.local.toml",
+            "ok",
+            "apps/pairing-server/dev.db 尚未创建（首次 dev:full 自动创建）",
         )
 
 

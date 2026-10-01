@@ -1,0 +1,171 @@
+# {{ ansible_managed }}
+# dropvoice pairing-server Caddyfile — 单模板渲染 staging（HTTP 形态，TLS 由
+# 内网隧道终结）与 production（TLS 形态，Cloudflare Origin CA + Full strict）。
+# 三站点按 Host 分流，与生产域名一一映射：
+#   landing_domain  营销页（landing-dist）
+#   app_domain      手机 PWA（mobile-dist）+ /api 同源反代（PWA 与 API 恒同源）
+#   api_domain      纯 API（桌面心跳/SSE；跨域 CORS 已由 tauri origin 白名单覆盖）
+# 加 <port> 兜底块仅供容器 healthcheck（127.0.0.1 无 Host 匹配）。
+#
+# 真实客户端 IP 链（B 方案）：servers.trusted_proxies（上游代理段）+
+# trusted_proxies_strict（从右往左信任链解析，官方对 CDN 链的推荐姿势）+
+# header_up X-Forwarded-For {client_ip}——axum 恒取 XFF 最左段即真实客户端
+# IP；未受信直连者的 XFF 被 Caddy 覆盖为其真实 IP（伪造免疫），且访问日志
+# 的 client_ip 字段自动有值。
+# 内部布局：Caddy {{ caddy_port }}（唯一发布端口），backend 127.0.0.1:{{ backend_port }}。
+{
+	auto_https off
+	servers {
+		trusted_proxies static {{ trusted_proxies_cidrs }}
+		trusted_proxies_strict
+	}
+}
+
+{% if tls_profile == 'origin' %}
+{% set scheme = "https" %}
+{% else %}
+{% set scheme = "http" %}
+{% endif %}
+{% set addr_prefix = scheme ~ "://" %}
+
+# ── 站点 1：landing（营销页）───────────────────────────────────────────────
+{{ addr_prefix }}{{ landing_domain }}:{{ caddy_port }} {
+{% if tls_profile == 'origin' %}
+	tls /app/certs/origin.pem /app/certs/origin.key
+{% endif %}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	encode zstd gzip
+
+	# 哈希资产：immutable 长缓存（经 Cloudflare 边缘缓存，源站 3Mbps 只付回源）。
+	handle /assets/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		root * /app/landing-dist
+		file_server
+	}
+
+	# HTML 入口：no-cache（HTML 永不进边缘缓存是域名方案的前提）。
+	handle {
+		header Cache-Control "no-cache"
+		root * /app/landing-dist
+		file_server
+	}
+
+	log {
+		output stderr
+		format console
+	}
+}
+
+# ── 站点 2：app（手机 PWA + /api 同源）────────────────────────────────────
+{{ addr_prefix }}{{ app_domain }}:{{ caddy_port }} {
+{% if tls_profile == 'origin' %}
+	tls /app/certs/origin.pem /app/certs/origin.key
+{% endif %}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	encode zstd gzip
+
+	# PWA 哈希资产：immutable，长缓存。
+	handle /assets/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		root * /app/mobile-dist
+		file_server
+	}
+
+	# PWA 入口 + service worker：no-cache。
+	handle /index.html {
+		header Cache-Control "no-cache"
+		root * /app/mobile-dist
+		file_server
+	}
+
+	handle /sw.js {
+		header Cache-Control "no-cache"
+		root * /app/mobile-dist
+		file_server
+	}
+
+	# WebRTC 信令 API + 健康检查（§4.1：/api/* 前缀）。
+	handle /api/* {
+		header Cache-Control "no-store"
+		reverse_proxy 127.0.0.1:{{ backend_port }} {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
+	handle /health {
+		header Cache-Control "no-store"
+		reverse_proxy 127.0.0.1:{{ backend_port }} {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
+	# 其余路径 = PWA 静态文件。
+	handle {
+		root * /app/mobile-dist
+		file_server
+	}
+
+	log {
+		output stderr
+		format console
+	}
+}
+
+# ── 站点 3：ps（纯 API，桌面端）───────────────────────────────────────────
+{{ addr_prefix }}{{ api_domain }}:{{ caddy_port }} {
+{% if tls_profile == 'origin' %}
+	tls /app/certs/origin.pem /app/certs/origin.key
+{% endif %}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	encode zstd gzip
+
+	handle /api/* {
+		header Cache-Control "no-store"
+		reverse_proxy 127.0.0.1:{{ backend_port }} {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
+	handle /health {
+		header Cache-Control "no-store"
+		reverse_proxy 127.0.0.1:{{ backend_port }} {
+			header_up X-Forwarded-For {client_ip}
+		}
+	}
+
+	# 机器 API 域名：其余路径一律 404（不发任何静态内容）。
+	respond 404
+
+	log {
+		output stderr
+		format console
+	}
+}
+
+# ── 兜底块：容器 healthcheck（127.0.0.1 无 Host 匹配时命中此块）──────────
+{{ addr_prefix }}127.0.0.1:{{ caddy_port }} {
+{% if tls_profile == 'origin' %}
+	tls /app/certs/origin.pem /app/certs/origin.key
+{% endif %}
+
+	handle /health {
+		reverse_proxy 127.0.0.1:{{ backend_port }}
+	}
+
+	respond 404
+}

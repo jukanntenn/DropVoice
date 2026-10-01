@@ -1,33 +1,41 @@
 ---
-# staging（fn @ 192.168.5.200）— 生产形态自托管验证场（dogfooding）。
-# HTTPS 由内网隧道在外部终止（dropvoice.bytehome.fun，运维操作）；Caddy
-# 内部保持 HTTP 形态（直接 copy docker/Caddyfile）。与生产的差异收敛为
-# 纯配置（域名/registry/TLS 终止点）。
-#
-# 默认部署 `main` tag（指向最新 main 分支）；固定版本 / 回滚用
-# deploy.py --tag <git-describe>（不可变 tag 由 docker/build.py --tags 推送）。
+# staging（fn @ 192.168.5.200）— 生产形态的同构映射（dogfooding）。
+# 域名一一映射生产（dropvoice.online ↔ dropvoice.bytehome.fun）：
+#   dropvoice.bytehome.fun        = landing
+#   app.dropvoice.bytehome.fun    = PWA + /api
+#   ps.dropvoice.bytehome.fun     = 纯 API（桌面端）
+# 除"无 Cloudflare"外与生产零结构差异：TLS 由内网隧道在外部终结（运维侧，
+# 需泛域名 *.dropvoice.bytehome.fun 证书 + 泛解析）；Caddy 渲染 HTTP 形态。
+# 把本文件的域名/TLS/信任段三项改掉即可直接套在 Cloudflare 后面。
 
 env: staging
 image_tag: main
 registry: "192.168.5.50:5000"
 image: "{{ registry }}/dropvoice/pairing-server:{{ image_tag }}"
 
-# Public entry point (TLS terminated by the ops-managed intranet tunnel);
-# the playbook's post-deploy smoke check runs against it.
-public_url: "https://dropvoice.bytehome.fun"
+# 三域名（生产同构）。
+landing_domain: dropvoice.bytehome.fun
+app_domain: app.dropvoice.bytehome.fun
+api_domain: ps.dropvoice.bytehome.fun
+
+# Smoke 入口（landing 域名；smoke.py 会同时探测 app/ps 两个域）。
+public_url: "https://{{ landing_domain }}"
 
 # 宿主发布端口：与隧道现状对齐（内网隧道指向 fn:8888，运维事实，勿随意改动）。
 host_port: 8888
 caddy_port: 8080
 tls_profile: http
 
+# 上游可信代理段：内网隧道网关（真实客户端 IP 经其 XFF 传入；trusted_proxies
+# _strict 从右往左解析信任链）。TODO(ops)：确认网关 IP 后收窄为单个 /32——
+# 暂信整个 staging LAN /24（dogfooding 威胁模型可接受）。
+trusted_proxies_cidrs: "192.168.5.0/24"
+
 debug: false
 
-# CORS 由 config.toml.j2 从 public_url + tauri webview 固定 origin 自动推导，
-# 环境不再手写 cors 列表。此处只声明额外项：dev 桌面（http://localhost:5173）
-# 直连 staging 是 dogfooding 常用形态。
-cors_extra_origins:
-  - http://localhost:5173
+# CORS：webview 已是纯视图（信令全在 Rust 进程），手机 PWA 同源——生产形态
+# 无跨域需求，留空。特殊实验需要时在此追加。
+cors_extra_origins: []
 
 app_dirs:
   - "{{ apps_path }}"

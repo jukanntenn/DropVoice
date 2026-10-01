@@ -71,28 +71,33 @@ RUN cargo build --release -p dropvoice-pairing-server && \
     cp target/release/pairing-server /usr/local/bin/pairing-server
 
 # ===========================================================================
-# Stage 3.5: PWA builder — build the mobile app with pnpm
+# Stage 3.5: Frontend builder — build mobile PWA + landing with pnpm
 # ===========================================================================
-# The PWA is baked into the image so the image is the single, self-contained
-# artifact: deployments upload nothing, and PWA version can never drift from
-# the backend version (deployments used to upload apps/mobile/dist from the
-# operator's working tree, which could be stale).
-FROM node:22-alpine AS pwa-builder
+# Both frontends are baked into the image so the image is the single,
+# self-contained artifact: deployments upload nothing, and frontend versions
+# can never drift from the backend version (deployments used to upload
+# apps/mobile/dist from the operator's working tree, which could be stale).
+# Layout at runtime: /app/mobile-dist (app.<domain>) + /app/landing-dist
+# (apex <domain>) — see docker/Caddyfile / ansible Caddyfile.j2.
+FROM node:22-alpine AS frontend-builder
 RUN npm install -g pnpm@11.0.0 --no-fund --no-audit
 WORKDIR /app
 # Manifests first so `pnpm install` is cached independently of sources.
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml .npmrc tsconfig.base.json ./
 COPY apps/mobile/package.json apps/mobile/package.json
+COPY apps/landing/package.json apps/landing/package.json
 COPY apps/desktop/package.json apps/desktop/package.json
 COPY packages/core/package.json packages/core/package.json
 COPY packages/i18n/package.json packages/i18n/package.json
 COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile
 COPY apps/mobile apps/mobile
+COPY apps/landing apps/landing
 COPY packages/core packages/core
 COPY packages/i18n packages/i18n
 COPY packages/ui packages/ui
-RUN pnpm --filter @dropvoice/mobile build
+RUN pnpm --filter @dropvoice/mobile build && \
+    pnpm --filter @dropvoice/landing build
 
 # ===========================================================================
 # Stage 4: Runtime — alpine + s6-overlay + Caddy
@@ -136,8 +141,10 @@ COPY apps/pairing-server/docker/Caddyfile /etc/caddy/Caddyfile
 # Rust binary (libsqlite3 is statically linked via sqlx's bundled sqlite — no .so needed).
 COPY --from=builder /usr/local/bin/pairing-server /app/pairing-server
 
-# Mobile PWA (built in the pwa-builder stage) — served by Caddy at /app/mobile-dist.
-COPY --from=pwa-builder /app/apps/mobile/dist /app/mobile-dist
+# Mobile PWA + landing (built in the frontend-builder stage) — served by Caddy
+# at /app/mobile-dist (app host) + /app/landing-dist (apex host).
+COPY --from=frontend-builder /app/apps/mobile/dist /app/mobile-dist
+COPY --from=frontend-builder /app/apps/landing/dist /app/landing-dist
 
 # Migrations are embedded in the binary via sqlx::migrate!, but keep a copy for
 # manual inspection / recovery.

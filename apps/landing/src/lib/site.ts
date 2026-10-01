@@ -8,8 +8,8 @@ export const SITE = {
   repo: 'https://github.com/jukanntenn/DropVoice',
   /** GitHub 最新 release 页（各平台安装包都在这里，永不失效的直链策略）。 */
   releases: 'https://github.com/jukanntenn/DropVoice/releases/latest',
-  /** 手机 PWA 入口（生产 pairing-server 同域反代；扫码目标）。 */
-  pwaUrl: 'https://api.dropvoice.app',
+  /** 手机 PWA 入口（生产 app 域名：PWA 与 /api 同源；扫码/落地目标）。 */
+  pwaUrl: 'https://app.dropvoice.online',
   version: '0.2.0',
   license: 'MIT',
 } as const;
