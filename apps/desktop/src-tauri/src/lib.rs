@@ -7,6 +7,7 @@ pub mod network;
 pub mod server;
 pub mod telemetry;
 pub mod text;
+pub mod webrtc;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -132,15 +133,6 @@ pub fn run() {
             commands::server::start_server,
             commands::server::stop_server,
             commands::server::get_connection_info,
-            commands::server::inject_text,
-            commands::server::save_token,
-            commands::server::issue_connection_token,
-            commands::server::validate_credential,
-            commands::server::refresh_pairing_token,
-            commands::server::get_pairing_token,
-            commands::server::get_signaling_url,
-            commands::server::register_client,
-            commands::server::unregister_client,
             commands::settings::get_settings,
             commands::settings::set_language,
             commands::settings::set_theme,

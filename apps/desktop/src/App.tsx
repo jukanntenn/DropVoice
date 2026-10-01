@@ -19,18 +19,6 @@ import { SettingsDialog } from './components/SettingsDialog';
 import { useAppSettings } from './hooks/useAppSettings';
 import { useAutoUpdate } from './hooks/useAutoUpdate';
 import { useServerState, useStartServer } from './hooks/useServerState';
-import { useWebRTC } from './hooks/useWebRTC';
-import { tauriInvoke } from './lib/invoke';
-
-/** 从 QR 载荷提取 device_id（dropvoice://pair?device=<id>&...）。 */
-function parseDeviceIdFromQr(qrPayload: string): string | null {
-  try {
-    const url = new URL(qrPayload);
-    return url.searchParams.get('device');
-  } catch {
-    return null;
-  }
-}
 
 function AppContent() {
   const { t } = useTranslation();
@@ -39,17 +27,18 @@ function AppContent() {
   /** §1："添加设备"浮层（已连接时再配对一台）。无 latch——主视图纯派生。 */
   const [addDeviceOpen, setAddDeviceOpen] = useState(false);
   const startAttemptedRef = useRef(false);
-  /** 已启动信令客户端的 device_id（幂等：设备不变不重启）。 */
-  const startedDeviceIdRef = useRef<string | null>(null);
 
   const serverState = useServerState();
   const settings = useAppSettings();
   const startServer = useStartServer();
   const { resolvedTheme } = useTheme();
   useAutoUpdate();
-  const webrtc = useWebRTC();
 
   // 应用启动时自动启动连接服务（仅一次）。
+  //
+  // start_server 在 Rust 侧一并拉起常驻子系统：heartbeat（注册/心跳/token
+  // 分发）、信令监督（SSE 订阅 + WebRTC 应答面）、注入队列——webview 只是
+  // 视图，不参与信令链路（托盘隐藏/休眠唤醒不再影响连接恢复）。
   useEffect(() => {
     if (startAttemptedRef.current) return;
     startAttemptedRef.current = true;
@@ -61,75 +50,6 @@ function AppContent() {
       }
     });
   }, [startServer, handleError]);
-
-  // 服务启动后：解析 device_id，监听首个 pairing_token，启动 WebRTC 信令客户端。
-  // SignalingClient.start 内部已监听后续 pairing_token 刷新（重建 SSE）。
-  //
-  // 幂等 + 自愈设计：
-  // - 设备不变时不重启客户端；设备变化（或数据瞬时丢失后恢复）时自动重建。
-  // - 不设一次性 ref 守卫——旧版"只启动一次 + cleanup 调 webrtc.stop()"在
-  //   get_connection_info 瞬时失败（running 变 undefined）时会把客户端永久停掉。
-  useEffect(() => {
-    const qrPayload = serverState.data?.qr_payload;
-    if (!qrPayload || !serverState.data?.running) return;
-    const deviceId = parseDeviceIdFromQr(qrPayload);
-    if (!deviceId) return;
-
-    // 已为同一设备启动过 → 幂等返回。
-    if (startedDeviceIdRef.current === deviceId) return;
-    startedDeviceIdRef.current = deviceId;
-
-    let unlistenFn: (() => void) | null = null;
-    let started = false;
-    let pollTimer: number | undefined;
-    let pollTimeout: number | undefined;
-
-    const startOnce = (token: string) => {
-      if (started) return;
-      started = true;
-      webrtc.start(deviceId, token);
-      if (pollTimer !== undefined) window.clearInterval(pollTimer);
-      if (pollTimeout !== undefined) window.clearTimeout(pollTimeout);
-      if (unlistenFn) {
-        unlistenFn();
-        unlistenFn = null;
-      }
-    };
-
-    // 注册 listener：首个 pairing_token 到达后启动 SSE 客户端，并取消自身。
-    listen<string>('pairing_token', (event) => {
-      if (event.payload) startOnce(event.payload);
-    })
-      .then((fn) => {
-        unlistenFn = fn;
-      })
-      .catch((err) => console.error('[app] listen pairing_token failed', err));
-
-    // 兜底：heartbeat 注册成功即 emit，可能早于本 listener 注册（Tauri 事件
-    // 不排队、不重发，事件会丢失）。300ms 轮询 Rust 已持久化的 token，最迟 8s。
-    pollTimer = window.setInterval(async () => {
-      if (started) {
-        window.clearInterval(pollTimer);
-        return;
-      }
-      try {
-        const token = await tauriInvoke.getPairingToken();
-        if (token) startOnce(token);
-      } catch {
-        // server 未就绪，继续轮询。
-      }
-    }, 300);
-    pollTimeout = window.setTimeout(() => {
-      window.clearInterval(pollTimer);
-    }, 8000);
-
-    return () => {
-      window.clearInterval(pollTimer);
-      window.clearTimeout(pollTimeout);
-      if (unlistenFn) unlistenFn();
-      // 设备变化（或重新挂载）时由下一次 effect 运行重建客户端，此处不永久停。
-    };
-  }, [serverState.data?.qr_payload, serverState.data?.running, webrtc]);
 
   // §6 配对码轮换事件总线：后端定时器到点轮换后 push `pairing_code_rotated`，
   // 前端即时更新连接信息缓存（QR/链接/重连码）。1s 轮询仍兜底 active_connections

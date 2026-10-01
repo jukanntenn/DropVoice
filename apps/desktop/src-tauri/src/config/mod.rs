@@ -7,13 +7,13 @@ use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
 
-/// 配对/信令服务器默认地址（生产 API，PWA 与 API 同源，§10.4）。
+/// 配对/信令服务器默认地址（生产纯 API 域名 ps.dropvoice.online）。
 ///
 /// URL 真源是 `config.toml` 的 `network.pairing_server_url`（serde 默认值
 /// 引用本常量）；env `PAIRING_SERVER_URL` 仅作开发编排覆盖（.vscode/tasks.json
 /// 内置，见 `network::pairing_client::resolve_base_url`）。staging
-/// （https://dropvoice.bytehome.fun）是内网 dogfood 场，不作发布默认值。
-pub const DEFAULT_PAIRING_SERVER_URL: &str = "https://api.dropvoice.app";
+/// （https://ps.dropvoice.bytehome.fun）是内网 dogfood 场，不作发布默认值。
+pub const DEFAULT_PAIRING_SERVER_URL: &str = "https://ps.dropvoice.online";
 
 /// Root configuration loaded from `config.toml`
 /// (`<config_dir>/dropvoice/config.toml`, Windows:

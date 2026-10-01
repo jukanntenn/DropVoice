@@ -1,25 +1,25 @@
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{watch, Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{info, warn};
 
 use crate::commands::{
-    AppState, ClientEvent, ClientInfo, ConnectionInfo, InjectionResultPayload, PairingCodePayload,
+    AppState, ClientInfo, ConnectionInfo, InjectionResultPayload, PairingCodePayload,
 };
 use crate::config::{DeviceConfig, DropVoiceConfig};
-use crate::connection::{ConnectionState, CredentialKind, InjectionResultCallback, PairingCode};
+use crate::connection::{ConnectionState, InjectionResultCallback, PairingCode};
 use crate::error::{AppError, AppResult};
 use crate::network::heartbeat;
-use crate::network::pairing_client;
-use crate::text::validate_text;
+use crate::network::signaling;
 
 /// 启动连接服务（webrtc-scan-direct-design §5）。
 ///
-/// 新架构下不再绑定 TCP/axum 服务器——WebRTC 信令客户端运行在 webview JS，
-/// Rust 侧只做：① 签发配对码；② 启动 heartbeat（注册 + emit pairing_token）；
-/// ③ ConnectionManager 就绪（注入队列）。
+/// 不绑定 TCP 端口——信令面与 WebRTC 应答面全部为 Rust 常驻子系统：
+/// ① 签发配对码；② heartbeat（注册 + pairing_token 经 watch 分发）；
+/// ③ signaling 监督任务（SSE 订阅 + offer 应答 + DataChannel 接线）；
+/// ④ ConnectionManager 就绪（注入队列）。webview 只做视图。
 #[tauri::command]
 pub async fn start_server(app: AppHandle, state: State<'_, AppState>) -> AppResult<ConnectionInfo> {
     // 拒绝重复启动。
@@ -64,13 +64,30 @@ pub async fn start_server(app: AppHandle, state: State<'_, AppState>) -> AppResu
     // 签发配对码（§3.2，6 位数字）。
     let pairing_code = cs.issue_pairing_code().await;
 
-    // 启动 heartbeat（注册 + emit pairing_token，§5.1 新增链路）。
-    let config = state.config.clone();
+    // pairing_token 总线：heartbeat 注册成功 → 分发给 signaling 监督任务。
     let get_ip: heartbeat::GetIpFn = Arc::new(get_local_ip);
-    let heartbeat_handle = heartbeat::start_heartbeat(app.clone(), config, get_ip);
+    let (token_tx, token_rx) = watch::channel(None);
+
+    // 启动 heartbeat（注册 + 心跳 + token 分发）。
+    let heartbeat_handle =
+        heartbeat::start_heartbeat(state.config.clone(), get_ip.clone(), token_tx.clone());
     {
         let mut guard = state.heartbeat.lock().await;
         *guard = Some(heartbeat_handle);
+    }
+
+    // 启动信令监督任务（SSE 订阅 + WebRTC 应答面）。
+    let signaling_handle = signaling::start_signaling(
+        app.clone(),
+        state.config.clone(),
+        state.connection_state.clone(),
+        token_rx,
+        token_tx,
+        get_ip,
+    );
+    {
+        let mut guard = state.signaling.lock().await;
+        *guard = Some(signaling_handle);
     }
 
     // 构建 QR 载荷（§6.5；纯读当前码，cs 此时仍 owned）。
@@ -109,9 +126,20 @@ pub async fn start_server(app: AppHandle, state: State<'_, AppState>) -> AppResu
     })
 }
 
-/// 停止连接服务 + heartbeat + 配对码轮换定时器。
+/// 停止连接服务：信令监督（SSE + 应答会话）→ heartbeat → 轮换定时器 → 状态。
 #[tauri::command]
 pub async fn stop_server(state: State<'_, AppState>) -> AppResult<()> {
+    // 先停信令监督任务：其收尾会注销全部客户端（依赖尚未清除的
+    // ConnectionState），并关闭全部 RTCPeerConnection。
+    let signaling_handle = {
+        let mut guard = state.signaling.lock().await;
+        guard.take()
+    };
+    if let Some(handle) = signaling_handle {
+        handle.stop().await;
+        info!("signaling supervisor stopped");
+    }
+
     // 停止 heartbeat。
     let heartbeat_handle = {
         let mut guard = state.heartbeat.lock().await;
@@ -206,152 +234,6 @@ pub async fn get_connection_info(state: State<'_, AppState>) -> AppResult<Connec
     })
 }
 
-/// 注入文本（webview JS 收到 DataChannel {type:text} 后调用，§5.1/§5.4）。
-#[tauri::command]
-pub async fn inject_text(
-    text: String,
-    client_id: String,
-    state: State<'_, AppState>,
-) -> AppResult<()> {
-    let max_text_length = state.config.read().await.injection.max_text_length;
-    validate_text(&text, max_text_length)?;
-    let guard = state.connection_state.lock().await;
-    let cs = guard.as_ref().ok_or(AppError::ServerStartFailed {
-        reason: "connection service not running".into(),
-    })?;
-    cs.connection_manager
-        .enqueue_injection(client_id.clone(), text.clone())
-        .map_err(|e| {
-            warn!(client_id = %client_id, error = %e, "inject_text rejected");
-            e
-        })?;
-    info!(client_id = %client_id, chars = text.chars().count(), "text injection enqueued");
-    Ok(())
-}
-
-/// 持久化连接令牌（webview JS 收到桌面签发后调用，§5.1）。
-///
-/// 注：实际签发由桌面侧完成（首次配对成功 + DataChannel open 后，
-/// JS 调用 issue_connection_token），此命令用于手机持久化的场景。
-/// 当前架构下签发在桌面侧，此命令保留供未来扩展。
-#[tauri::command]
-pub async fn save_token(token: String, state: State<'_, AppState>) -> AppResult<()> {
-    let guard = state.connection_state.lock().await;
-    let cs = guard.as_ref().ok_or(AppError::ServerStartFailed {
-        reason: "connection service not running".into(),
-    })?;
-    cs.add_connection_token(token).await;
-    Ok(())
-}
-
-/// 签发新连接令牌并返回（首次配对成功 + DataChannel open 后 JS 调用，§5.1/§6.3）。
-///
-/// 桌面侧签发 `dvct_` 令牌，持久化（FIFO 上限 100），返回给 JS 通过
-/// DataChannel 发给手机 `{type:"token",token}`。
-#[tauri::command]
-pub async fn issue_connection_token(state: State<'_, AppState>) -> AppResult<String> {
-    let guard = state.connection_state.lock().await;
-    let cs = guard.as_ref().ok_or(AppError::ServerStartFailed {
-        reason: "connection service not running".into(),
-    })?;
-    Ok(cs.issue_connection_token().await)
-}
-
-/// 校验 credential（webview JS 收到 SSE offer 后调用，§5.1/§5.7）。
-///
-/// 桌面本地比对 code（5min TTL）或 token（内存）。返回命中的 credential 类型，
-/// JS 据此决定生成 accepted 还是 rejected answer。
-#[tauri::command]
-pub async fn validate_credential(
-    credential: String,
-    state: State<'_, AppState>,
-) -> AppResult<String> {
-    let guard = state.connection_state.lock().await;
-    let cs = guard.as_ref().ok_or(AppError::ServerStartFailed {
-        reason: "connection service not running".into(),
-    })?;
-    let kind = cs.validate_credential(&credential).await;
-    let result = match kind {
-        CredentialKind::Code => "code",
-        CredentialKind::Token => "token",
-        CredentialKind::Invalid => "invalid",
-    };
-    Ok(result.to_string())
-}
-
-/// 同步刷新 pairing_token（webview JS SSE 收 401 时调用，决策点③，§5.7）。
-///
-/// 触发一次注册流程获取新 token，持久化 + emit pairing_token。
-/// JS 收到 emit 后重建 SSE 连接。
-#[tauri::command]
-pub async fn refresh_pairing_token(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> AppResult<String> {
-    let config = state.config.clone();
-    let get_ip: heartbeat::GetIpFn = Arc::new(get_local_ip);
-    heartbeat::refresh_pairing_token(app, config, get_ip)
-        .await
-        .map_err(|e| AppError::ServerStartFailed { reason: e })
-}
-
-/// 注册一个已连接的手机（DataChannel open 后 JS 调用）。
-#[tauri::command]
-pub async fn register_client(
-    client_id: String,
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> AppResult<()> {
-    let guard = state.connection_state.lock().await;
-    let cs = guard.as_ref().ok_or(AppError::ServerStartFailed {
-        reason: "connection service not running".into(),
-    })?;
-    cs.connection_manager.register(client_id.clone()).await?;
-    info!(client_id = %client_id, "client registered (DataChannel open)");
-    drop(guard);
-    // §0.3/§6：push `client_registered`，前端据此关闭"添加设备"浮层（§1）。
-    if let Err(e) = app.emit("client_registered", ClientEvent { client_id }) {
-        warn!(error = %e, "failed to emit client_registered event");
-    }
-    Ok(())
-}
-
-/// 注销一个已连接的手机（DataChannel close 后 JS 调用）。
-#[tauri::command]
-pub async fn unregister_client(client_id: String, state: State<'_, AppState>) -> AppResult<()> {
-    let guard = state.connection_state.lock().await;
-    let cs = guard.as_ref().ok_or(AppError::ServerStartFailed {
-        reason: "connection service not running".into(),
-    })?;
-    cs.connection_manager.unregister(&client_id).await;
-    info!(client_id = %client_id, "client unregistered (DataChannel closed)");
-    Ok(())
-}
-
-/// 返回当前持久化的 pairing_token（§5.1 启动引导兜底）。
-///
-/// heartbeat 注册成功即 emit "pairing_token"，但 webview JS 的 listen() 注册
-/// 晚于 emit 时事件丢失（Tauri 事件不排队、不重发）。JS 侧在事件未及时到达时
-/// 轮询本命令获取 token（heartbeat 已持久化到 config）。
-#[tauri::command]
-pub async fn get_pairing_token(state: State<'_, AppState>) -> AppResult<Option<String>> {
-    let cfg = state.config.read().await;
-    Ok(cfg.device.pairing_token.clone())
-}
-
-/// 返回解析后的信令服务器 base URL（webview JS 的 SSE / answer POST 用，§5.1）。
-///
-/// URL 真源在 Rust（env `PAIRING_SERVER_URL` 开发编排覆盖 → 配置
-/// `network.pairing_server_url`），webview 构建时不再注入任何 URL ——
-/// Rust 心跳与 webview SSE 因此永远指向同一台服务器。
-#[tauri::command]
-pub async fn get_signaling_url(state: State<'_, AppState>) -> AppResult<String> {
-    let cfg = state.config.read().await;
-    Ok(pairing_client::resolve_base_url(
-        &cfg.network.pairing_server_url,
-    ))
-}
-
 /// 构建 QR 载荷（§6.5：dropvoice://pair?code=&device=&name=）。
 ///
 /// §6：纯读当前配对码（不轮换）。命令路径（get_connection_info）与定时器路径
@@ -434,7 +316,7 @@ fn spawn_pairing_code_rotation(
     })
 }
 
-/// 取本机 IP（简化版，用于 heartbeat 注册）。
+/// 本机 IP（简化版，用于 heartbeat 注册）。
 fn get_local_ip() -> Option<String> {
     // 使用 local_ip_address crate（已在依赖中）。
     local_ip_address::local_ip().ok().map(|ip| ip.to_string())

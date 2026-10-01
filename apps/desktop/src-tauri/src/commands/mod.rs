@@ -12,6 +12,7 @@ use tokio::task::JoinHandle;
 use crate::config::DropVoiceConfig;
 use crate::connection::ConnectionState;
 use crate::network::heartbeat::HeartbeatHandle;
+use crate::network::signaling::SignalingHandle;
 
 /// `pairing_code_rotated` 事件载荷（§0.3/§6）：配对码到点轮换后 push 给前端。
 #[derive(Clone, Serialize)]
@@ -85,6 +86,8 @@ pub struct AppState {
     pub connection_state: Arc<Mutex<Option<ConnectionState>>>,
     /// Heartbeat 句柄（活跃时存在）。
     pub heartbeat: Arc<Mutex<Option<HeartbeatHandle>>>,
+    /// 信令监督任务句柄（SSE 订阅 + 应答会话；活跃时存在）。
+    pub signaling: Arc<Mutex<Option<SignalingHandle>>>,
     /// §6 配对码轮换定时器句柄（start_server 创建，stop_server abort）。
     pub rotation_task: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
@@ -96,6 +99,7 @@ impl AppState {
             resource_dir,
             connection_state: Arc::new(Mutex::new(None)),
             heartbeat: Arc::new(Mutex::new(None)),
+            signaling: Arc::new(Mutex::new(None)),
             rotation_task: Arc::new(Mutex::new(None)),
         }
     }

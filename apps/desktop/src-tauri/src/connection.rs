@@ -237,6 +237,11 @@ pub struct ConnectionState {
 
 impl ConnectionState {
     pub fn new(config: DropVoiceConfig) -> Self {
+        Self::with_injector(config, Arc::new(EnigoInjector::new()))
+    }
+
+    /// 测试/嵌入入口：自定义 Injector（单测用 MockInjector 走完整注入路径）。
+    pub fn with_injector(config: DropVoiceConfig, injector: Arc<dyn Injector>) -> Self {
         let max_connections = config.server.max_connections;
         let queue_size = config.injection.queue_size;
         let max_text_length = config.injection.max_text_length;
@@ -245,7 +250,7 @@ impl ConnectionState {
             max_connections,
             queue_size,
             max_text_length,
-            Arc::new(EnigoInjector::new()),
+            injector,
         ));
         // 加载持久化的连接令牌（含签发时间；旧版字符串数组兼容见 config::deserialize_connected_tokens）。
         let tokens = config.device.connected_tokens.clone().unwrap_or_default();
