@@ -1,60 +1,70 @@
-//! Device 仓储（spec 11 §5.1.1 幂等 upsert）。
+//! Device 仓储（凭据模型：token 哈希落库 + 只发不复述）。
 //!
 //! 使用 sqlx 运行时查询（`query_as` + `FromRow`），不依赖编译期 `query!` 宏，
 //! 因此无需 `DATABASE_URL` 即可编译。
+//!
+//! 安全不变量（凭据模型重设计）：
+//! 1. token 只存 SHA-256 哈希（`token_hash`）——DB 泄露 ≠ token 泄露。
+//! 2. 已存在设备的 token **绝不向无凭据方复述**：重复注册必须携带当前有效
+//!    Bearer token（401 否则）。device_id 印在配对二维码里，若裸注册即可
+//!    领走 token，等于 QR 截图 = 永久信令通道接管。
+//! 3. token 轮换（超过 `DEVICE_TOKEN_TTL`）也要求先通过旧 token 校验，
+//!    新 token 只发给旧 token 持有者。
 
 use chrono::{DateTime, Utc};
 use sqlx::{FromRow, SqlitePool};
 use uuid::Uuid;
 
+use crate::api::auth::token_hash;
 use crate::clock::Clock;
 use crate::domain::{Device, DeviceAddress, DeviceRegisterRequest};
 use crate::error::{AppError, AppResult};
 
-/// upsert 结果：区分新建（201）与复用/续期（200），供 handler 选择状态码。
+/// upsert 结果：区分新建（201）与复用/轮换（200）与凭据缺失（401）。
 #[derive(Debug, Clone)]
 pub enum RegisterOutcome {
-    /// 新建设备（HTTP 201）。
+    /// 新建设备（HTTP 201）。`device.pairing_token` 为新颁发的 token（首次披露）。
     Created(Device),
-    /// 复用/续期设备（HTTP 200）。续期时携带旧 token 供缓存失效。
-    Reused {
-        device: Device,
-        old_token: Option<String>,
-    },
+    /// 设备已存在且 Bearer 校验通过，token 未到轮换期（HTTP 200）。
+    /// `device.pairing_token` 为请求携带 token 的回显（不产生新披露）。
+    Reused(Device),
+    /// 设备已存在且 Bearer 校验通过，token 超过 TTL 被轮换（HTTP 200）。
+    /// `device.pairing_token` 为新 token；旧 token（= 请求携带者）由调用方失效缓存。
+    Rotated(Device),
+    /// 设备已存在但请求未携带有效 token（HTTP 401）。
+    Unverified,
 }
 
-/// 行结构（运行时 FromRow 映射）。时间戳以 unix 秒存。
-/// 部分 field 仅用于反序列化占位（sqlx 需要完整列映射），允许 dead_code。
+/// 行结构（运行时 FromRow 映射，仅取分派所需列）。时间戳以 unix 秒存。
 #[derive(Debug, Clone, FromRow)]
-#[allow(dead_code)]
 struct DeviceRow {
     id: String,
-    platform: String,
     device_name: Option<String>,
-    ip: String,
-    port: i64,
-    pairing_token: String,
-    is_online: i64,
-    last_seen: i64,
     created_at: i64,
+    /// SHA-256 hex；认证比对用，永不外发。
+    token_hash: String,
+    token_issued_at: i64,
 }
 
-/// 幂等 upsert：device_id 不存在→新建；存在且 token 有效→复用；过期→刷新。
+/// 注册 upsert：按凭据模型分派四种结局。
 ///
-/// Pre-req-4：新建分支使用 `INSERT ... ON CONFLICT(id) DO NOTHING` 防并发竞态。
+/// - 不存在 → `Created`（`INSERT ... ON CONFLICT(id) DO NOTHING` 防并发竞态）。
+/// - 存在 + Bearer 哈希命中：
+///   - token 超过 `DEVICE_TOKEN_TTL`（以 `token_issued_at` 计）→ `Rotated`；
+///   - 否则 → `Reused`（仅更新地址/在线状态）。
+/// - 存在 + 无 Bearer / 哈希不匹配 → `Unverified`（调用方映射 401）。
 pub async fn upsert(
     pool: &SqlitePool,
     req: &DeviceRegisterRequest,
+    bearer_token: Option<&str>,
     new_token: &str,
     clock: &dyn Clock,
 ) -> AppResult<RegisterOutcome> {
     let id = req.device_id.to_string();
     let now = clock.now();
 
-    // 先尝试 SELECT（大多数请求走复用路径）。
     let existing: Option<DeviceRow> = sqlx::query_as::<_, DeviceRow>(
-        r#"SELECT id, platform, device_name, ip, port, pairing_token,
-                  is_online, last_seen, created_at
+        r#"SELECT id, device_name, created_at, token_hash, token_issued_at
            FROM devices WHERE id = ?"#,
     )
     .bind(&id)
@@ -63,50 +73,15 @@ pub async fn upsert(
     .map_err(|e| AppError::Internal(e.into()))?;
 
     if let Some(row) = existing {
-        let created = DateTime::from_timestamp(row.created_at, 0).unwrap_or(now);
-        let token_expired = now - created > crate::config::DEVICE_TOKEN_TTL;
-
-        if token_expired {
-            // 续期：刷新 token + 地址 + 在线状态。返回旧 token 供缓存失效。
-            let old_token = row.pairing_token.clone();
-            refresh(pool, &id, &req.address, new_token, now).await?;
-            let device = Device {
-                id: req.device_id,
-                platform: req.platform,
-                device_name: req.device_name.clone().or(row.device_name),
-                address: req.address.clone(),
-                pairing_token: new_token.to_string(),
-                created_at: created,
-            };
-            return Ok(RegisterOutcome::Reused {
-                device,
-                old_token: Some(old_token),
-            });
-        }
-
-        // 复用原 token。
-        mark_online(pool, &id, &req.address, now).await?;
-        let device = Device {
-            id: req.device_id,
-            platform: req.platform,
-            device_name: req.device_name.clone().or(row.device_name),
-            address: req.address.clone(),
-            pairing_token: row.pairing_token,
-            created_at: created,
-        };
-        return Ok(RegisterOutcome::Reused {
-            device,
-            old_token: None,
-        });
+        return match_existing(pool, row, req, bearer_token, new_token, now).await;
     }
 
-    // 新建：Pre-req-4 使用 ON CONFLICT 防并发竞态。
-    let created_at = now.timestamp();
-    let last_seen = now.timestamp();
+    // 新建：ON CONFLICT 防并发竞态。
+    let new_hash = token_hash(new_token);
     let result = sqlx::query(
-        r#"INSERT INTO devices (id, platform, device_name, ip, port, pairing_token,
-                                 is_online, last_seen, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+        r#"INSERT INTO devices (id, platform, device_name, ip, port,
+                                 is_online, last_seen, created_at, token_hash, token_issued_at)
+           VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
            ON CONFLICT(id) DO NOTHING"#,
     )
     .bind(&id)
@@ -114,39 +89,25 @@ pub async fn upsert(
     .bind(&req.device_name)
     .bind(&req.address.ip)
     .bind(req.address.port as i64)
-    .bind(new_token)
-    .bind(last_seen)
-    .bind(created_at)
+    .bind(now.timestamp())
+    .bind(now.timestamp())
+    .bind(&new_hash)
+    .bind(now.timestamp())
     .execute(pool)
     .await
     .map_err(|e| AppError::Internal(e.into()))?;
 
     if result.rows_affected() == 0 {
-        // 并发插入已有记录，回退到复用分支。
+        // 并发插入已有记录：重新读取并按已存在路径分派（持有效 token 者胜出）。
         let row: DeviceRow = sqlx::query_as::<_, DeviceRow>(
-            r#"SELECT id, platform, device_name, ip, port, pairing_token,
-                      is_online, last_seen, created_at
+            r#"SELECT id, device_name, created_at, token_hash, token_issued_at
                FROM devices WHERE id = ?"#,
         )
         .bind(&id)
         .fetch_one(pool)
         .await
         .map_err(|e| AppError::Internal(e.into()))?;
-
-        let created = DateTime::from_timestamp(row.created_at, 0).unwrap_or(now);
-        mark_online(pool, &id, &req.address, now).await?;
-        let device = Device {
-            id: req.device_id,
-            platform: req.platform,
-            device_name: req.device_name.clone().or(row.device_name),
-            address: req.address.clone(),
-            pairing_token: row.pairing_token,
-            created_at: created,
-        };
-        return Ok(RegisterOutcome::Reused {
-            device,
-            old_token: None,
-        });
+        return match_existing(pool, row, req, bearer_token, new_token, now).await;
     }
 
     let device = Device {
@@ -158,6 +119,55 @@ pub async fn upsert(
         created_at: now,
     };
     Ok(RegisterOutcome::Created(device))
+}
+
+/// 已存在设备的分派逻辑（含并发插入竞态回退路径）。
+async fn match_existing(
+    pool: &SqlitePool,
+    row: DeviceRow,
+    req: &DeviceRegisterRequest,
+    bearer_token: Option<&str>,
+    new_token: &str,
+    now: DateTime<Utc>,
+) -> AppResult<RegisterOutcome> {
+    let created = DateTime::from_timestamp(row.created_at, 0).unwrap_or(now);
+    let issued_at = DateTime::from_timestamp(row.token_issued_at, 0).unwrap_or(created);
+
+    // Bearer 哈希比对；空 hash（迁移存量）视为不匹配。
+    let verified = bearer_token
+        .map(|t| !row.token_hash.is_empty() && token_hash(t) == row.token_hash)
+        .unwrap_or(false);
+    if !verified {
+        return Ok(RegisterOutcome::Unverified);
+    }
+
+    let bearer = bearer_token.expect("verified implies bearer present");
+
+    if now - issued_at > crate::config::DEVICE_TOKEN_TTL {
+        // 轮换：仅旧 token 持有者可获得新 token。
+        rotate_token(pool, &row.id, &req.address, &token_hash(new_token), now).await?;
+        let device = Device {
+            id: req.device_id,
+            platform: req.platform,
+            device_name: req.device_name.clone().or(row.device_name),
+            address: req.address.clone(),
+            pairing_token: new_token.to_string(),
+            created_at: created,
+        };
+        return Ok(RegisterOutcome::Rotated(device));
+    }
+
+    // 复用：回显请求携带的 token（调用方已持有，无新披露）。
+    mark_online(pool, &row.id, &req.address, now).await?;
+    let device = Device {
+        id: req.device_id,
+        platform: req.platform,
+        device_name: req.device_name.clone().or(row.device_name),
+        address: req.address.clone(),
+        pairing_token: bearer.to_string(),
+        created_at: created,
+    };
+    Ok(RegisterOutcome::Reused(device))
 }
 
 /// 仅更新地址 + 在线状态（复用 token 时调用）。
@@ -180,21 +190,22 @@ async fn mark_online(
     Ok(())
 }
 
-/// 刷新 token + 地址 + 在线状态（续期时调用）。
-async fn refresh(
+/// 轮换 token + 刷新地址 + 在线状态（Bearer 校验通过且超 TTL 时调用）。
+async fn rotate_token(
     pool: &SqlitePool,
     id: &str,
     addr: &DeviceAddress,
-    new_token: &str,
+    new_hash: &str,
     now: DateTime<Utc>,
 ) -> AppResult<()> {
     sqlx::query(
-        r#"UPDATE devices SET ip = ?, port = ?, pairing_token = ?, is_online = 1,
-                               last_seen = ? WHERE id = ?"#,
+        r#"UPDATE devices SET ip = ?, port = ?, token_hash = ?, token_issued_at = ?,
+                               is_online = 1, last_seen = ? WHERE id = ?"#,
     )
     .bind(&addr.ip)
     .bind(addr.port as i64)
-    .bind(new_token)
+    .bind(new_hash)
+    .bind(now.timestamp())
     .bind(now.timestamp())
     .bind(id)
     .execute(pool)
@@ -204,7 +215,7 @@ async fn refresh(
 }
 
 /// 更新地址（可选 device_name）+ 在线状态。`PUT /status` 心跳调用。
-/// 返回设备当前 token（用于认证校验）。设备不存在→`DeviceNotFound`。
+/// 设备不存在→`DeviceNotFound`。
 ///
 /// 注意：生产路径统一走 batch writer，此函数仅用于仓储层直接测试。
 #[cfg(test)]
@@ -214,42 +225,37 @@ pub async fn update_status(
     addr: &DeviceAddress,
     device_name: Option<&str>,
     clock: &dyn Clock,
-) -> AppResult<String> {
+) -> AppResult<()> {
     let id = device_id.to_string();
     let now = clock.now();
-
-    #[derive(FromRow)]
-    struct TokenRow {
-        pairing_token: String,
-    }
-    let row = sqlx::query_as::<_, TokenRow>(
+    let result = sqlx::query(
         r#"UPDATE devices
            SET ip = ?, port = ?, device_name = COALESCE(?, device_name),
                is_online = 1, last_seen = ?
-           WHERE id = ?
-           RETURNING pairing_token"#,
+           WHERE id = ?"#,
     )
     .bind(&addr.ip)
     .bind(addr.port as i64)
     .bind(device_name)
     .bind(now.timestamp())
     .bind(&id)
-    .fetch_optional(pool)
+    .execute(pool)
     .await
-    .map_err(|e| AppError::Internal(e.into()))?
-    .ok_or(AppError::DeviceNotFound)?;
-
-    Ok(row.pairing_token)
+    .map_err(|e| AppError::Internal(e.into()))?;
+    if result.rows_affected() == 0 {
+        return Err(AppError::DeviceNotFound);
+    }
+    Ok(())
 }
 
-/// 按 token 查询设备 id（认证用）。返回 None 表示 token 无效。
+/// 按 token 查询设备 id（认证用）。哈希后比对。返回 None 表示 token 无效。
 pub async fn find_id_by_token(pool: &SqlitePool, token: &str) -> AppResult<Option<Uuid>> {
     #[derive(FromRow)]
     struct IdRow {
         id: String,
     }
-    let row = sqlx::query_as::<_, IdRow>(r#"SELECT id FROM devices WHERE pairing_token = ?"#)
-        .bind(token)
+    let row = sqlx::query_as::<_, IdRow>(r#"SELECT id FROM devices WHERE token_hash = ?"#)
+        .bind(token_hash(token))
         .fetch_optional(pool)
         .await
         .map_err(|e| AppError::Internal(e.into()))?;
@@ -270,6 +276,18 @@ pub async fn mark_stale_offline(pool: &SqlitePool, threshold: DateTime<Utc>) -> 
             .execute(pool)
             .await
             .map_err(|e| AppError::Internal(e.into()))?;
+    Ok(res.rows_affected())
+}
+
+/// 删除超过保留期未上线的设备（设备表 GC，防无认证注册刷行数）。
+/// 后台任务调用；桌面端 token 持久化在本地，被 GC 的设备重新注册即恢复
+/// （新建分支，需要重扫码配对手机）。
+pub async fn delete_stale(pool: &SqlitePool, cutoff: DateTime<Utc>) -> AppResult<u64> {
+    let res = sqlx::query(r#"DELETE FROM devices WHERE last_seen < ?"#)
+        .bind(cutoff.timestamp())
+        .execute(pool)
+        .await
+        .map_err(|e| AppError::Internal(e.into()))?;
     Ok(res.rows_affected())
 }
 
@@ -351,125 +369,143 @@ mod tests {
         }
     }
 
-    /// UT-device_repo-01：新建 → Created。
+    /// UT-device_repo-01：新建 → Created，携带新 token。
     #[tokio::test]
     async fn upsert_new_device_returns_created() {
         let db = TestDb::new().await;
         let clock = fixed_clock();
         let req = sample_request();
-        let outcome = upsert(&db.pool, &req, "test-token", &clock).await.unwrap();
+        let outcome = upsert(&db.pool, &req, None, "first-token", &clock)
+            .await
+            .unwrap();
         match outcome {
             RegisterOutcome::Created(d) => {
                 assert_eq!(d.id, sample_device_id());
-                assert_eq!(d.pairing_token, "test-token");
+                assert_eq!(d.pairing_token, "first-token");
             }
             _ => panic!("expected Created"),
         }
     }
 
-    /// UT-device_repo-02：复用（token 有效）→ Reused 原 token。
+    /// UT-device_repo-02（凭据模型核心）：已存在 + 无 Bearer → Unverified（401），
+    /// 绝不复述已有 token。
     #[tokio::test]
-    async fn upsert_existing_reuses_token() {
+    async fn upsert_existing_without_bearer_is_unverified() {
         let db = TestDb::new().await;
         let clock = fixed_clock();
         let req = sample_request();
 
-        upsert(&db.pool, &req, "first-token", &clock).await.unwrap();
-        let outcome = upsert(&db.pool, &req, "second-token", &clock)
+        upsert(&db.pool, &req, None, "first-token", &clock)
+            .await
+            .unwrap();
+        // 攻击者知道 device_id（QR 截图），裸注册拿不到 token。
+        let outcome = upsert(&db.pool, &req, None, "attacker-token", &clock)
+            .await
+            .unwrap();
+        assert!(matches!(outcome, RegisterOutcome::Unverified));
+    }
+
+    /// UT-device_repo-03：已存在 + Bearer 匹配 → Reused，回显 bearer。
+    #[tokio::test]
+    async fn upsert_existing_with_valid_bearer_reuses() {
+        let db = TestDb::new().await;
+        let clock = fixed_clock();
+        let req = sample_request();
+
+        upsert(&db.pool, &req, None, "first-token", &clock)
+            .await
+            .unwrap();
+        let outcome = upsert(&db.pool, &req, Some("first-token"), "ignored", &clock)
             .await
             .unwrap();
         match outcome {
-            RegisterOutcome::Reused { device, old_token } => {
-                assert_eq!(device.pairing_token, "first-token");
-                assert!(old_token.is_none());
-            }
+            RegisterOutcome::Reused(d) => assert_eq!(d.pairing_token, "first-token"),
             _ => panic!("expected Reused"),
         }
     }
 
-    /// UT-device_repo-03：续期（token 过期）→ Reused 新 token。
+    /// UT-device_repo-04：已存在 + Bearer 错误 → Unverified。
     #[tokio::test]
-    async fn upsert_expired_token_refreshes() {
+    async fn upsert_existing_with_wrong_bearer_is_unverified() {
         let db = TestDb::new().await;
         let clock = fixed_clock();
         let req = sample_request();
 
-        upsert(&db.pool, &req, "old-token", &clock).await.unwrap();
-
-        // 推进 25 小时（超过 DEVICE_TOKEN_TTL 24h）。
-        clock.advance(chrono::Duration::hours(25));
-
-        let outcome = upsert(&db.pool, &req, "new-token", &clock).await.unwrap();
-        match outcome {
-            RegisterOutcome::Reused { device, old_token } => {
-                assert_eq!(device.pairing_token, "new-token");
-                assert_eq!(old_token, Some("old-token".to_string()));
-            }
-            _ => panic!("expected Reused with new token"),
-        }
+        upsert(&db.pool, &req, None, "first-token", &clock)
+            .await
+            .unwrap();
+        let outcome = upsert(&db.pool, &req, Some("wrong"), "attacker", &clock)
+            .await
+            .unwrap();
+        assert!(matches!(outcome, RegisterOutcome::Unverified));
     }
 
-    /// UT-device_repo-04：device_name 缺省时复用 DB 值。
+    /// UT-device_repo-05：token 超 TTL + Bearer 匹配 → Rotated（仅持有者可得新 token）。
+    #[tokio::test]
+    async fn upsert_stale_bearer_rotates() {
+        let db = TestDb::new().await;
+        let clock = fixed_clock();
+        let req = sample_request();
+
+        upsert(&db.pool, &req, None, "old-token", &clock)
+            .await
+            .unwrap();
+        clock.advance(chrono::Duration::hours(25));
+
+        // 攻击者趁过期裸注册：仍被拒。
+        let outcome = upsert(&db.pool, &req, None, "attacker", &clock)
+            .await
+            .unwrap();
+        assert!(matches!(outcome, RegisterOutcome::Unverified));
+
+        // 持旧 token 的合法桌面：拿到轮换后的新 token。
+        let outcome = upsert(&db.pool, &req, Some("old-token"), "new-token", &clock)
+            .await
+            .unwrap();
+        match outcome {
+            RegisterOutcome::Rotated(d) => assert_eq!(d.pairing_token, "new-token"),
+            _ => panic!("expected Rotated"),
+        }
+        // 旧 token 立即失效。
+        assert_eq!(find_id_by_token(&db.pool, "old-token").await.unwrap(), None);
+    }
+
+    /// UT-device_repo-06：device_name 缺省时复用 DB 值。
     #[tokio::test]
     async fn upsert_reuses_db_device_name() {
         let db = TestDb::new().await;
         let clock = fixed_clock();
         let req = sample_request();
 
-        upsert(&db.pool, &req, "token", &clock).await.unwrap();
+        upsert(&db.pool, &req, None, "token", &clock).await.unwrap();
 
-        // 第二次不带 device_name。
+        // 第二次不带 device_name，但带有效 token。
         let mut req2 = req.clone();
         req2.device_name = None;
-        let outcome = upsert(&db.pool, &req2, "token2", &clock).await.unwrap();
+        let outcome = upsert(&db.pool, &req2, Some("token"), "token2", &clock)
+            .await
+            .unwrap();
         match outcome {
-            RegisterOutcome::Reused { device, .. } => {
-                assert_eq!(device.device_name, Some("Test PC".into()));
-            }
+            RegisterOutcome::Reused(d) => assert_eq!(d.device_name, Some("Test PC".into())),
             _ => panic!("expected Reused"),
         }
     }
 
-    /// UT-device_repo-05：mark_online 更新地址+在线。
-    #[tokio::test]
-    async fn mark_online_updates_address() {
-        let db = TestDb::new().await;
-        let clock = fixed_clock();
-        let req = sample_request();
-
-        upsert(&db.pool, &req, "token", &clock).await.unwrap();
-
-        let new_addr = DeviceAddress {
-            ip: "10.0.0.1".into(),
-            port: 9999,
-        };
-        mark_online(
-            &db.pool,
-            &sample_device_id().to_string(),
-            &new_addr,
-            clock.now(),
-        )
-        .await
-        .unwrap();
-
-        let addr = current_address(&db.pool, sample_device_id()).await.unwrap();
-        assert_eq!(addr.ip, "10.0.0.1");
-        assert_eq!(addr.port, 9999);
-    }
-
-    /// UT-device_repo-06：find_id_by_token 命中。
+    /// UT-device_repo-07：find_id_by_token 命中（哈希比对）。
     #[tokio::test]
     async fn find_id_by_token_hit() {
         let db = TestDb::new().await;
         let clock = fixed_clock();
         let req = sample_request();
 
-        upsert(&db.pool, &req, "my-token", &clock).await.unwrap();
+        upsert(&db.pool, &req, None, "my-token", &clock)
+            .await
+            .unwrap();
         let id = find_id_by_token(&db.pool, "my-token").await.unwrap();
         assert_eq!(id, Some(sample_device_id()));
     }
 
-    /// UT-device_repo-07：find_id_by_token 未命中。
+    /// UT-device_repo-08：find_id_by_token 未命中。
     #[tokio::test]
     async fn find_id_by_token_miss() {
         let db = TestDb::new().await;
@@ -477,14 +513,32 @@ mod tests {
         assert!(id.is_none());
     }
 
-    /// UT-device_repo-09：mark_stale_offline 阈值边界。
+    /// UT-device_repo-09：token 在库中只存哈希（明文不可见）。
+    #[tokio::test]
+    async fn token_stored_as_hash_not_plaintext() {
+        let db = TestDb::new().await;
+        let clock = fixed_clock();
+        let req = sample_request();
+
+        upsert(&db.pool, &req, None, "plaintext-secret", &clock)
+            .await
+            .unwrap();
+        let row: (String,) = sqlx::query_as("SELECT token_hash FROM devices")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        assert_eq!(row.0, token_hash("plaintext-secret"));
+        assert_ne!(row.0, "plaintext-secret");
+    }
+
+    /// UT-device_repo-10：mark_stale_offline 阈值边界。
     #[tokio::test]
     async fn mark_stale_offline_threshold() {
         let db = TestDb::new().await;
         let clock = fixed_clock();
         let req = sample_request();
 
-        upsert(&db.pool, &req, "token", &clock).await.unwrap();
+        upsert(&db.pool, &req, None, "token", &clock).await.unwrap();
 
         // 阈值 = now → 设备不离线（last_seen == now，严格 < 不成立）。
         let threshold = clock.now();
@@ -497,14 +551,33 @@ mod tests {
         assert_eq!(n, 1);
     }
 
-    /// UT-device_repo-10：count_online。
+    /// UT-device_repo-11：delete_stale 仅删保留期外设备。
+    #[tokio::test]
+    async fn delete_stale_removes_only_old_devices() {
+        let db = TestDb::new().await;
+        let clock = fixed_clock();
+        let req = sample_request();
+
+        upsert(&db.pool, &req, None, "token", &clock).await.unwrap();
+
+        // 保留期内：不删。
+        let cutoff = clock.now() - chrono::Duration::days(30) + chrono::Duration::hours(1);
+        assert_eq!(delete_stale(&db.pool, cutoff).await.unwrap(), 0);
+
+        // 保留期外：删。
+        clock.advance(chrono::Duration::days(31));
+        let cutoff = clock.now() - chrono::Duration::days(30);
+        assert_eq!(delete_stale(&db.pool, cutoff).await.unwrap(), 1);
+    }
+
+    /// UT-device_repo-12：count_online。
     #[tokio::test]
     async fn count_online_correct() {
         let db = TestDb::new().await;
         let clock = fixed_clock();
         let req = sample_request();
 
-        upsert(&db.pool, &req, "token", &clock).await.unwrap();
+        upsert(&db.pool, &req, None, "token", &clock).await.unwrap();
         assert_eq!(count_online(&db.pool).await.unwrap(), 1);
 
         // 标记离线。
@@ -513,20 +586,20 @@ mod tests {
         assert_eq!(count_online(&db.pool).await.unwrap(), 0);
     }
 
-    /// UT-device_repo-11：current_address 命中。
+    /// UT-device_repo-13：current_address 命中。
     #[tokio::test]
     async fn current_address_hit() {
         let db = TestDb::new().await;
         let clock = fixed_clock();
         let req = sample_request();
 
-        upsert(&db.pool, &req, "token", &clock).await.unwrap();
+        upsert(&db.pool, &req, None, "token", &clock).await.unwrap();
         let addr = current_address(&db.pool, sample_device_id()).await.unwrap();
         assert_eq!(addr.ip, "192.168.1.100");
         assert_eq!(addr.port, 38425);
     }
 
-    /// UT-device_repo-12：current_address 不存在。
+    /// UT-device_repo-14：current_address 不存在。
     #[tokio::test]
     async fn current_address_not_found() {
         let db = TestDb::new().await;
@@ -534,19 +607,19 @@ mod tests {
         assert!(matches!(result, Err(AppError::DeviceNotFound)));
     }
 
-    /// UT-device_repo-14：update_status 更新地址和 device_name。
+    /// UT-device_repo-15：update_status 更新地址和 device_name。
     #[tokio::test]
     async fn update_status_updates_address_and_name() {
         let db = TestDb::new().await;
         let clock = fixed_clock();
         let req = sample_request();
-        upsert(&db.pool, &req, "token", &clock).await.unwrap();
+        upsert(&db.pool, &req, None, "token", &clock).await.unwrap();
 
         let new_addr = DeviceAddress {
             ip: "10.0.0.99".into(),
             port: 7777,
         };
-        let returned_token = update_status(
+        update_status(
             &db.pool,
             sample_device_id(),
             &new_addr,
@@ -555,15 +628,13 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(returned_token, "token");
 
-        // 验证地址已更新。
         let addr = current_address(&db.pool, sample_device_id()).await.unwrap();
         assert_eq!(addr.ip, "10.0.0.99");
         assert_eq!(addr.port, 7777);
     }
 
-    /// UT-device_repo-15：update_status 设备不存在。
+    /// UT-device_repo-16：update_status 设备不存在。
     #[tokio::test]
     async fn update_status_device_not_found() {
         let db = TestDb::new().await;
@@ -576,36 +647,8 @@ mod tests {
         assert!(matches!(result, Err(AppError::DeviceNotFound)));
     }
 
-    /// UT-device_repo-16：update_status device_name=None 不覆盖原值。
-    #[tokio::test]
-    async fn update_status_none_name_preserves_original() {
-        let db = TestDb::new().await;
-        let clock = fixed_clock();
-        let req = sample_request();
-        upsert(&db.pool, &req, "token", &clock).await.unwrap();
-
-        let addr = DeviceAddress {
-            ip: "192.168.1.100".into(),
-            port: 38425,
-        };
-        update_status(&db.pool, sample_device_id(), &addr, None, &clock)
-            .await
-            .unwrap();
-
-        // 验证 device_name 未被覆盖。
-        let mut req2 = sample_request();
-        req2.device_name = None;
-        let outcome = upsert(&db.pool, &req2, "token2", &clock).await.unwrap();
-        match outcome {
-            RegisterOutcome::Reused { device, .. } => {
-                assert_eq!(device.device_name, Some("Test PC".into()));
-            }
-            _ => panic!("expected Reused"),
-        }
-    }
-
-    /// UT-device_repo-17：并发同 id 注册（Pre-req-4 ON CONFLICT 路径）。
-    /// 100 个并发请求同 device_id，全部应返回 Created 或 Reused，无 500。
+    /// UT-device_repo-17：并发同 id 注册（ON CONFLICT 路径）。
+    /// 首个请求创建，其余持不同 token 的裸注册应得 Unverified，无 500。
     #[tokio::test]
     async fn concurrent_upsert_same_id_no_error() {
         let db = TestDb::new().await;
@@ -619,7 +662,7 @@ mod tests {
             let c = clock.clone();
             join_set.spawn(async move {
                 let token = format!("token-{i}");
-                upsert(&pool, &r, &token, c.as_ref() as &dyn Clock).await
+                upsert(&pool, &r, None, &token, c.as_ref() as &dyn Clock).await
             });
         }
 
@@ -630,6 +673,11 @@ mod tests {
                 "concurrent upsert failed: {:?}",
                 outcome.err()
             );
+            // 首个创建成功；其余均为 Unverified（无凭据不可复述）。
+            assert!(matches!(
+                outcome.unwrap(),
+                RegisterOutcome::Created(_) | RegisterOutcome::Unverified
+            ));
         }
     }
 }

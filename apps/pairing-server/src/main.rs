@@ -87,6 +87,17 @@ fn spawn_background_tasks(state: AppState) {
                     Ok(_) => {}
                     Err(e) => tracing::warn!(error = %e, "offline marking failed"),
                 }
+                // 设备表 GC：超过保留期（30 天）未上线的设备删除——POST /api/devices
+                // 对新设备无认证，无 GC 则行数可被无界刷大。被删设备重新注册即恢复
+                //（新建分支；手机需重扫码）。
+                let cutoff = state.clock.now() - config::DEVICE_RETENTION;
+                match store::device_repo::delete_stale(&state.pool, cutoff).await {
+                    Ok(n) if n > 0 => {
+                        tracing::info!(deleted = n, "stale devices garbage collected")
+                    }
+                    Ok(_) => {}
+                    Err(e) => tracing::warn!(error = %e, "device GC failed"),
+                }
                 // 刷新 L3 在线计数
                 if let Ok(c) = store::device_repo::count_online(&state.pool).await {
                     state

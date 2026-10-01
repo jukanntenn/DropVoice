@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, Notify, RwLock};
 use uuid::Uuid;
 
-use crate::config::{MAX_SESSIONS_PER_DEVICE, SIGNAL_SESSION_TTL};
+use crate::config::{MAX_SESSIONS_PER_DEVICE, SIGNAL_SESSION_TTL, SSE_TICKET_TTL};
 
 /// 桌面回填的 answer 状态。
 #[derive(Debug, Clone, serde::Serialize)]
@@ -69,12 +69,29 @@ static NEXT_SUB_ID: AtomicU64 = AtomicU64::new(1);
 /// Per-device SSE 订阅表：`device_id -> (offer 推送 sender, 订阅身份 sub_id)`。
 type OfferMap = Arc<RwLock<HashMap<Uuid, (mpsc::Sender<OfferEvent>, u64)>>>;
 
-/// 信令会话存储 + offer 推送桥。
+/// SSE 订阅票据（一次性，短 TTL）。
+#[derive(Debug)]
+struct TicketEntry {
+    device_id: Uuid,
+    expires_at: Instant,
+}
+
+impl TicketEntry {
+    fn is_expired(&self, now: Instant) -> bool {
+        now >= self.expires_at
+    }
+}
+
+/// 信令会话存储 + offer 推送桥 + SSE 订阅票据。
 #[derive(Clone)]
 pub struct SignalStore {
     sessions: Arc<RwLock<HashMap<String, SignalSession>>>,
     /// `device_id -> (sender, sub_id)`：sub_id 让 unsubscribe 做身份化 compare-and-delete。
     offers: OfferMap,
+    /// 待兑换的 SSE 订阅票据（`ticket -> (device_id, expires_at)`）。
+    /// 长效 pairing_token 不进 URL（Caddy 日志记录完整 uri），票据单次使用、
+    /// 60s 过期，出现在日志中无害。
+    tickets: Arc<RwLock<HashMap<String, TicketEntry>>>,
 }
 
 impl SignalStore {
@@ -82,6 +99,35 @@ impl SignalStore {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             offers: Arc::new(RwLock::new(HashMap::new())),
+            tickets: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// 签发 SSE 订阅票据（Bearer 校验通过后调用）。顺带清扫过期票据。
+    pub async fn issue_ticket(&self, device_id: Uuid) -> String {
+        let ticket = crate::api::error::generate_token();
+        let now = Instant::now();
+        let mut tickets = self.tickets.write().await;
+        tickets.retain(|_, e| !e.is_expired(now));
+        tickets.insert(
+            ticket.clone(),
+            TicketEntry {
+                device_id,
+                expires_at: now + SSE_TICKET_TTL,
+            },
+        );
+        ticket
+    }
+
+    /// 兑换 SSE 订阅票据：单次使用、限期、device 必须匹配。
+    /// 返回 false 表示票据无效（含已用/过期/设备不匹配）。
+    pub async fn redeem_ticket(&self, ticket: &str, device_id: Uuid) -> bool {
+        let now = Instant::now();
+        let mut tickets = self.tickets.write().await;
+        match tickets.remove(ticket) {
+            // remove 即单次使用：并发兑换同一票据只有一个成功。
+            Some(entry) => !entry.is_expired(now) && entry.device_id == device_id,
+            None => false,
         }
     }
 
@@ -569,5 +615,52 @@ mod tests {
             .unwrap();
         let session2 = store.get_session(&sid2).await.unwrap();
         assert_eq!(session2.credential, "dvct_abc123");
+    }
+
+    // ── SSE 订阅票据 ──────────────────────────────────────────────────────
+
+    /// UT-ticket-01：签发后可兑换，且只能兑换一次。
+    #[tokio::test]
+    async fn ticket_redeemable_exactly_once() {
+        let store = make_store();
+        let device_id = Uuid::new_v4();
+        let ticket = store.issue_ticket(device_id).await;
+
+        assert!(store.redeem_ticket(&ticket, device_id).await);
+        // 第二次兑换（已消费）失败。
+        assert!(!store.redeem_ticket(&ticket, device_id).await);
+    }
+
+    /// UT-ticket-02：票据与设备绑定。
+    #[tokio::test]
+    async fn ticket_bound_to_device() {
+        let store = make_store();
+        let device_id = Uuid::new_v4();
+        let ticket = store.issue_ticket(device_id).await;
+
+        assert!(!store.redeem_ticket(&ticket, Uuid::new_v4()).await);
+        // 错误设备的兑换也消费票据（防重放枚举）。
+        assert!(!store.redeem_ticket(&ticket, device_id).await);
+    }
+
+    /// UT-ticket-03：未知票据拒绝。
+    #[tokio::test]
+    async fn unknown_ticket_rejected() {
+        let store = make_store();
+        assert!(!store.redeem_ticket("no-such-ticket", Uuid::new_v4()).await);
+    }
+
+    /// UT-ticket-04：过期票据拒绝（手工置过期，同 session TTL 测试手法）。
+    #[tokio::test]
+    async fn expired_ticket_rejected() {
+        let store = make_store();
+        let device_id = Uuid::new_v4();
+        let ticket = store.issue_ticket(device_id).await;
+
+        {
+            let mut tickets = store.tickets.write().await;
+            tickets.get_mut(&ticket).unwrap().expires_at = Instant::now() - Duration::from_secs(1);
+        }
+        assert!(!store.redeem_ticket(&ticket, device_id).await);
     }
 }

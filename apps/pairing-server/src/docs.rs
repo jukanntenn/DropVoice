@@ -29,23 +29,25 @@ use crate::store::device_repo::DeviceSummary;
         title = "DropVoice Pairing & Signaling Server API",
         version = env!("CARGO_PKG_VERSION"),
         description = "公网 HTTPS 配对 + WebRTC 信令服务器。部署在 VPS 上，经 Cloudflare 回源到 \
-            Caddy:443，再反向代理到 axum 127.0.0.1:38424。\n\n\
+            Caddy:4443，再反向代理到 axum 127.0.0.1:38424。\n\n\
             ## 职责边界\n\
             本服务只做**设备注册 + WebRTC 信令转发**，绝不中继文本数据。\n\
             手机扫码后发起 offer，服务器通过 SSE 转发给桌面，桌面回填 answer；\n\
             SDP 交换完成后，手机↔桌面 WebRTC DataChannel P2P 直连，服务器退出。\n\n\
             ## 认证\n\
-            - `POST /api/devices`：无认证（设备注册，幂等 upsert）。\n\
+            - `POST /api/devices`：新建设备无需认证；已存在设备须携带 Bearer（当前 \
+            token）方可复用/轮换，否则 401——token 绝不复述给无凭据方。\n\
             - `PUT /api/devices/{id}/status`：Bearer token（注册时颁发的 `pairing_token`）。\n\
             - `POST /api/devices/{id}/webrtc/offer`：body 带 code（首次配对）或 token（重连）。\n\
-            - `GET /api/devices/{id}/webrtc/events`（SSE）：query `?token=<pairing_token>`。\n\
+            - `POST /api/devices/{id}/webrtc/subscribe`：Bearer token → 一次性 SSE 票据。\n\
+            - `GET /api/devices/{id}/webrtc/events`（SSE）：query `?ticket=`（一次性票据）。\n\
             - `POST /api/devices/{id}/webrtc/answer`：Bearer token。\n\
             - `GET /api/devices/{id}/webrtc/answer/{session_id}`：session_id 自身即为凭据。",
         contact(name = "DropVoice"),
         license(name = "MIT")
     ),
     servers(
-        (url = "https://api.dropvoice.app", description = "生产环境（Cloudflare → Caddy:443 → axum:38424）")
+        (url = "https://ps.dropvoice.online", description = "生产环境（Cloudflare → Caddy:4443 → axum:38424）")
     ),
     tags(
         (name = "devices", description = "设备注册与状态上报"),
@@ -57,6 +59,7 @@ use crate::store::device_repo::DeviceSummary;
         devices::report_status,
         signaling_handlers::create_offer,
         signaling_handlers::poll_answer,
+        signaling_handlers::subscribe_ticket,
         signaling_handlers::subscribe_events,
         signaling_handlers::submit_answer,
         crate::api::health,
@@ -73,6 +76,7 @@ use crate::store::device_repo::DeviceSummary;
             signaling_handlers::AnswerRequest,
             signaling_handlers::AnswerResponse,
             signaling_handlers::AnswerDecision,
+            signaling_handlers::TicketResponse,
             StatusReportRequest,
             StatusReportResponse,
             crate::api::HealthResponse,
@@ -225,16 +229,17 @@ fn ensure_trailing_newline(s: &str) -> String {
 mod tests {
     use super::*;
 
-    /// 文档包含全部 7 个路径。
+    /// 文档包含全部 8 个路径。
     #[test]
     fn api_doc_contains_all_paths() {
         let spec = ApiDoc::openapi();
-        assert_eq!(spec.paths.paths.len(), 7);
+        assert_eq!(spec.paths.paths.len(), 8);
         for p in [
             "/api/devices",
             "/api/devices/{device_id}/status",
             "/api/devices/{device_id}/webrtc/offer",
             "/api/devices/{device_id}/webrtc/answer/{session_id}",
+            "/api/devices/{device_id}/webrtc/subscribe",
             "/api/devices/{device_id}/webrtc/events",
             "/api/devices/{device_id}/webrtc/answer",
             "/health",

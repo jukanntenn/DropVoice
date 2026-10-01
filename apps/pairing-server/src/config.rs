@@ -58,8 +58,21 @@ pub const MAX_SESSIONS_PER_DEVICE: usize = 10;
 /// SDP 载荷上限（§4.6：64KB，校验拒绝防滥用）。
 pub const SDP_MAX_BYTES: usize = 64 * 1024;
 
-/// 配对 Token 有效期（24 小时）。设备最长离线仍能复用旧 token 的语义。
+/// 配对 Token 有效期（24 小时）。超过后注册时轮换（需携带旧 token）。
 pub const DEVICE_TOKEN_TTL: chrono::Duration = chrono::Duration::hours(24);
+
+/// 设备保留期（30 天未上线即被 GC 删除；防无认证注册刷行数）。
+/// 被删设备重新注册即恢复（新建分支，手机需重扫码）。
+pub const DEVICE_RETENTION: chrono::Duration = chrono::Duration::days(30);
+
+/// SSE 订阅票据 TTL（60 秒，单次使用）。长效 token 不进 URL（日志泄露面）。
+pub const SSE_TICKET_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// 全局并发 SSE 连接上限（每桌面仅 1 条，此值即最大桌面规模 × 冗余）。
+pub const MAX_CONCURRENT_SSE: usize = 1024;
+
+/// 全局并发 answer 长轮询等待上限（豁免限流端点的资源封顶）。
+pub const MAX_CONCURRENT_POLLS: usize = 2048;
 
 /// 桌面端状态上报周期（5 分钟）。服务端用 2× 此值作为"离线"阈值。
 pub const DEVICE_STATUS_INTERVAL: chrono::Duration = chrono::Duration::minutes(5);
@@ -205,6 +218,10 @@ mod tests {
         assert_eq!(MAX_SESSIONS_PER_DEVICE, 10);
         assert_eq!(SDP_MAX_BYTES, 64 * 1024);
         assert_eq!(DEVICE_TOKEN_TTL.num_hours(), 24);
+        assert_eq!(DEVICE_RETENTION.num_days(), 30);
+        assert_eq!(SSE_TICKET_TTL, std::time::Duration::from_secs(60));
+        assert_eq!(MAX_CONCURRENT_SSE, 1024);
+        assert_eq!(MAX_CONCURRENT_POLLS, 2048);
         assert_eq!(PAIRING_TOKEN_LEN, 64);
         assert_eq!(RATE_LIMIT_PER_SEC, 1);
         assert_eq!(SQLITE_BUSY_TIMEOUT_MS, 50);

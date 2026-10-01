@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DropVoice Pairing & Signaling Server API",
-    "description": "公网 HTTPS 配对 + WebRTC 信令服务器。部署在 VPS 上，经 Cloudflare 回源到 Caddy:443，再反向代理到 axum 127.0.0.1:38424。\n\n## 职责边界\n本服务只做**设备注册 + WebRTC 信令转发**，绝不中继文本数据。\n手机扫码后发起 offer，服务器通过 SSE 转发给桌面，桌面回填 answer；\nSDP 交换完成后，手机↔桌面 WebRTC DataChannel P2P 直连，服务器退出。\n\n## 认证\n- `POST /api/devices`：无认证（设备注册，幂等 upsert）。\n- `PUT /api/devices/{id}/status`：Bearer token（注册时颁发的 `pairing_token`）。\n- `POST /api/devices/{id}/webrtc/offer`：body 带 code（首次配对）或 token（重连）。\n- `GET /api/devices/{id}/webrtc/events`（SSE）：query `?token=<pairing_token>`。\n- `POST /api/devices/{id}/webrtc/answer`：Bearer token。\n- `GET /api/devices/{id}/webrtc/answer/{session_id}`：session_id 自身即为凭据。",
+    "description": "公网 HTTPS 配对 + WebRTC 信令服务器。部署在 VPS 上，经 Cloudflare 回源到 Caddy:4443，再反向代理到 axum 127.0.0.1:38424。\n\n## 职责边界\n本服务只做**设备注册 + WebRTC 信令转发**，绝不中继文本数据。\n手机扫码后发起 offer，服务器通过 SSE 转发给桌面，桌面回填 answer；\nSDP 交换完成后，手机↔桌面 WebRTC DataChannel P2P 直连，服务器退出。\n\n## 认证\n- `POST /api/devices`：新建设备无需认证；已存在设备须携带 Bearer（当前 token）方可复用/轮换，否则 401——token 绝不复述给无凭据方。\n- `PUT /api/devices/{id}/status`：Bearer token（注册时颁发的 `pairing_token`）。\n- `POST /api/devices/{id}/webrtc/offer`：body 带 code（首次配对）或 token（重连）。\n- `POST /api/devices/{id}/webrtc/subscribe`：Bearer token → 一次性 SSE 票据。\n- `GET /api/devices/{id}/webrtc/events`（SSE）：query `?ticket=`（一次性票据）。\n- `POST /api/devices/{id}/webrtc/answer`：Bearer token。\n- `GET /api/devices/{id}/webrtc/answer/{session_id}`：session_id 自身即为凭据。",
     "contact": {
       "name": "DropVoice"
     },
@@ -13,8 +13,8 @@
   },
   "servers": [
     {
-      "url": "https://api.dropvoice.app",
-      "description": "生产环境（Cloudflare → Caddy:443 → axum:38424）"
+      "url": "https://ps.dropvoice.online",
+      "description": "生产环境（Cloudflare → Caddy:4443 → axum:38424）"
     }
   ],
   "paths": {
@@ -23,8 +23,8 @@
         "tags": [
           "devices"
         ],
-        "summary": "设备注册（幂等 upsert）",
-        "description": "桌面端本地生成持久化 UUID v4 作为 device_id（首次启动后永不变更）。\n本端点为幂等 upsert 语义：\n- device_id 不存在 → 创建记录，颁发 token → 201 Created\n- device_id 存在且 token 有效 → 返回现有记录（含原 token）→ 200 OK\n- device_id 存在但 token 已过期 → 刷新 token，返回新 token → 200 OK\n重复注册是预期内的正常行为（应用重启、网络重连、IP 变化都会触发），不是冲突，不返回 409。",
+        "summary": "设备注册（凭据受控的幂等 upsert）",
+        "description": "桌面端本地生成持久化 UUID v4 作为 device_id（首次启动后永不变更），\ntoken 持久化在桌面本地；重复注册需携带当前有效 token（Authorization Bearer）：\n- 新 device_id → 创建，颁发 pairing_token → 201\n- 已存在 + 有效 Bearer → 200（token 回显；超过 24h TTL 则轮换为新 token）\n- 已存在 + 无/无效 Bearer → 401（token 绝不复述给无凭据方）",
         "operationId": "registerDevice",
         "requestBody": {
           "content": {
@@ -52,7 +52,7 @@
         },
         "responses": {
           "200": {
-            "description": "设备已存在（复用或续期）。返回现有记录；若 token 已过期，返回新 token",
+            "description": "设备已存在（Bearer 校验通过）。token 为回显或轮换后的新值",
             "content": {
               "application/json": {
                 "schema": {
@@ -84,6 +84,9 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -256,7 +259,7 @@
           "webrtc-signaling"
         ],
         "summary": "手机长轮询 answer（hold 30s）",
-        "description": "手机 POST offer 后长轮询此端点。\n- answer 就绪 → 200 立即返回（accepted/rejected）\n- 30s 内无 answer → 204（桌面离线或 SSE 未就绪）\n- session 过期/不存在 → 404\nsession_id 是手机刚 POST offer 拿到的（高熵），无需额外认证。",
+        "description": "手机 POST offer 后长轮询此端点。\n- answer 就绪 → 200 立即返回（accepted/rejected）\n- 30s 内无 answer → 204（桌面离线或 SSE 未就绪）\n- session 过期/不存在 → 404\nsession_id 是手机刚 POST offer 拿到的（高熵），无需额外认证。\n全局并发等待有上限，超限返回 429。",
         "operationId": "pollAnswer",
         "parameters": [
           {
@@ -295,8 +298,53 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           }
         }
+      }
+    },
+    "/api/devices/{device_id}/webrtc/subscribe": {
+      "post": {
+        "tags": [
+          "webrtc-signaling"
+        ],
+        "summary": "桌面换取 SSE 一次性订阅票据",
+        "description": "桌面持 Bearer pairing_token 调用，换取 60 秒单次使用的订阅票据，\n随后以 `GET .../webrtc/events?ticket=` 建立 SSE 长连接。\n票据与 device_id 绑定，兑换即失效。",
+        "operationId": "subscribeTicket",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "description": "桌面自身设备 ID",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "票据签发",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/api/devices/{device_id}/webrtc/events": {
@@ -304,8 +352,8 @@
         "tags": [
           "webrtc-signaling"
         ],
-        "summary": "桌面 SSE 长连接（query token 认证）",
-        "description": "桌面维持 1 条 SSE 长连接，接收手机的 incoming offer。\n认证用 query 参数 `?token=<pairing_token>`（EventSource 不支持自定义 header，§4.2）。\n每 15s 发具名 `ping` 事件（防 CF 125s 超时 + 连接活性监测）。\noffer 事件 data 格式：`{session_id, credential, sdp}`。",
+        "summary": "桌面 SSE 长连接（一次性票据认证）",
+        "description": "桌面维持 1 条 SSE 长连接，接收手机的 incoming offer。\n认证用 query 参数 `?ticket=`（由 `POST .../webrtc/subscribe` 以 Bearer 换取，\n60s 单次使用——长效 pairing_token 不进 URL，避免进入访问日志）。\n每 15s 发具名 `ping` 事件（防 CF 125s 超时 + 连接活性监测）。\noffer 事件 data 格式：`{session_id, credential, sdp}`。",
         "operationId": "subscribeEvents",
         "parameters": [
           {
@@ -319,9 +367,9 @@
             }
           },
           {
-            "name": "token",
+            "name": "ticket",
             "in": "query",
-            "description": "pairing_token（Bearer 替代，SSE 专用）",
+            "description": "一次性订阅票据（Bearer 换取）",
             "required": true,
             "schema": {
               "type": "string"
@@ -339,6 +387,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
           }
         }
       }
@@ -748,6 +799,19 @@
           "ok": {
             "type": "boolean",
             "example": true
+          }
+        }
+      },
+      "TicketResponse": {
+        "type": "object",
+        "description": "`POST /webrtc/subscribe` 响应体。",
+        "required": [
+          "ticket"
+        ],
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "description": "一次性 SSE 订阅票据（60s TTL，单次使用）。"
           }
         }
       }

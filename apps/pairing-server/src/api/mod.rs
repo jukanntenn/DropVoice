@@ -5,15 +5,16 @@
 //! 业务路由（rate-limited，`/api` 前缀）：
 //! | Method | Path | Auth | Handler |
 //! |--------|------|------|---------|
-//! | POST | /api/devices | 无 | `devices::register` |
+//! | POST | /api/devices | 可选 Bearer（复用/轮换需凭据） | `devices::register` |
 //! | PUT  | /api/devices/{id}/status | Bearer | `devices::report_status` |
 //! | POST | /api/devices/{id}/webrtc/offer | body code/token | `signaling_handlers::create_offer` |
 //!
 //! 信令路由（部分 rate-exempt，§4.8 独立 Router merge）：
 //! | Method | Path | Auth | Handler | Rate-limit |
 //! |--------|------|------|---------|------------|
-//! | GET  | /api/devices/{id}/webrtc/answer/{session_id} | session_id（凭据） | `signaling_handlers::poll_answer` | 豁免 |
-//! | GET  | /api/devices/{id}/webrtc/events | query token | `signaling_handlers::subscribe_events` | 豁免 |
+//! | GET  | /api/devices/{id}/webrtc/answer/{session_id} | session_id（凭据） | `signaling_handlers::poll_answer` | 豁免（并发帽） |
+//! | POST | /api/devices/{id}/webrtc/subscribe | Bearer | `signaling_handlers::subscribe_ticket` | 豁免（桌面低频） |
+//! | GET  | /api/devices/{id}/webrtc/events | query ticket（一次性） | `signaling_handlers::subscribe_events` | 豁免（并发帽） |
 //! | POST | /api/devices/{id}/webrtc/answer | Bearer | `signaling_handlers::submit_answer` | 豁免（桌面低频） |
 //!
 //! 健康检查（无 `/api` 前缀）：
@@ -67,14 +68,19 @@ pub fn build_app_router(state: state::AppState) -> Router {
         .merge(build_exempt_router(state))
 }
 ///
-/// SSE 长连接 + answer 长轮询 + answer 回填豁免限速：
+/// SSE 长连接 + answer 长轮询 + 票据/answer 回填豁免限速：
 /// - SSE/长轮询是长连接，限速 1 req/s/IP 会让桌面心跳式重连被判 429；
-/// - answer 回填是桌面低频操作（每次配对 1 次）。
+/// - 票据换取与 answer 回填是桌面低频操作（每次 SSE 重建/配对各 1 次）。
+/// - 豁免端点各自有并发帽兜底（config::MAX_CONCURRENT_*），不构成无界资源占用。
 fn build_exempt_router(state: state::AppState) -> Router {
     Router::new()
         .route(
             "/api/devices/{device_id}/webrtc/answer/{session_id}",
             get(signaling_handlers::poll_answer),
+        )
+        .route(
+            "/api/devices/{device_id}/webrtc/subscribe",
+            post(signaling_handlers::subscribe_ticket),
         )
         .route(
             "/api/devices/{device_id}/webrtc/events",
@@ -157,14 +163,22 @@ pub async fn serve(config: Config, state: state::AppState) -> anyhow::Result<()>
         app = app.layer(cors);
     }
 
-    // access log（TraceLayer 输出 http.request span）
+    // access log（TraceLayer 输出 http.request span）。
+    // client_ip 来自 XFF 最左段（Caddy 已按信任链重写为真实客户端 IP 单值）——
+    // 限流 key 用了 IP，日志必须同步记录，否则封禁排查无从下手。
     app = app.layer(
         TraceLayer::new_for_http()
             .make_span_with(|req: &axum::http::Request<axum::body::Body>| {
+                let connect_addr = req
+                    .extensions()
+                    .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+                    .map(|ci| ci.0);
+                let client_ip = auth::extract_client_ip(req.headers(), &connect_addr);
                 tracing::info_span!(
                     "http.request",
                     method = req.method().as_str(),
                     path = req.uri().path(),
+                    client_ip = %client_ip,
                 )
             })
             .on_response(

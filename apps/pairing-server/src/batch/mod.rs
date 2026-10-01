@@ -136,7 +136,7 @@ mod tests {
                 port: 38425,
             },
         };
-        device_repo::upsert(pool, &req, "token", clock)
+        device_repo::upsert(pool, &req, None, "token", clock)
             .await
             .unwrap();
     }
@@ -190,11 +190,11 @@ mod tests {
                 port: 38425,
             },
         };
-        let outcome = device_repo::upsert(&db.pool, &req, "token", &clock)
+        let outcome = device_repo::upsert(&db.pool, &req, Some("token"), "ignored", &clock)
             .await
             .unwrap();
         match outcome {
-            device_repo::RegisterOutcome::Reused { device, .. } => {
+            device_repo::RegisterOutcome::Reused(device) => {
                 assert_eq!(device.device_name, Some("New Name".into()));
             }
             _ => panic!("expected Reused"),

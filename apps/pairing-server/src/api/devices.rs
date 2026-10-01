@@ -15,17 +15,28 @@ use crate::docs::{BadRequest, NotFound, RateLimited, Unauthorized};
 use crate::domain::{
     DeviceRegisterRequest, DeviceRegisterResponse, StatusReportRequest, StatusReportResponse,
 };
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::store::device_repo::{self, RegisterOutcome};
 
-/// `POST /devices` —— 幂等 upsert（spec 11 §5.1.1）。
+/// `POST /devices` —— 凭据受控的幂等 upsert。
+///
+/// 安全不变量（凭据模型）：token 只在创建/轮换时颁发，**绝不向无凭据方复述**
+/// ——device_id 印在配对二维码里，裸注册若可领走 token，QR 截图即等于永久
+/// 信令通道接管。分派：
+/// - device_id 不存在 → 创建，颁发 token → 201 Created
+/// - 存在且携带有效 Bearer（当前 token）→ 返回回显/轮换后的 token → 200 OK
+/// - 存在但无凭据或凭据错误 → 401（不轮换、不披露任何信息）
 #[utoipa::path(
     post,
     path = "/api/devices",
     tag = "devices",
     operation_id = "registerDevice",
-    summary = "设备注册（幂等 upsert）",
-    description = "桌面端本地生成持久化 UUID v4 作为 device_id（首次启动后永不变更）。\n本端点为幂等 upsert 语义：\n- device_id 不存在 → 创建记录，颁发 token → 201 Created\n- device_id 存在且 token 有效 → 返回现有记录（含原 token）→ 200 OK\n- device_id 存在但 token 已过期 → 刷新 token，返回新 token → 200 OK\n重复注册是预期内的正常行为（应用重启、网络重连、IP 变化都会触发），不是冲突，不返回 409。",
+    summary = "设备注册（凭据受控的幂等 upsert）",
+    description = "桌面端本地生成持久化 UUID v4 作为 device_id（首次启动后永不变更），\n\
+        token 持久化在桌面本地；重复注册需携带当前有效 token（Authorization Bearer）：\n\
+        - 新 device_id → 创建，颁发 pairing_token → 201\n\
+        - 已存在 + 有效 Bearer → 200（token 回显；超过 24h TTL 则轮换为新 token）\n\
+        - 已存在 + 无/无效 Bearer → 401（token 绝不复述给无凭据方）",
     request_body(
         content = DeviceRegisterRequest,
         content_type = "application/json",
@@ -46,9 +57,10 @@ use crate::store::device_repo::{self, RegisterOutcome};
                 "pairing_token": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
                 "created_at": "2026-07-18T12:00:00Z"
             })),
-        (status = 200, description = "设备已存在（复用或续期）。返回现有记录；若 token 已过期，返回新 token",
+        (status = 200, description = "设备已存在（Bearer 校验通过）。token 为回显或轮换后的新值",
             body = DeviceRegisterResponse),
         (status = 400, response = BadRequest),
+        (status = 401, response = Unauthorized),
         (status = 429, response = RateLimited)
     )
 )]
@@ -59,6 +71,7 @@ use crate::store::device_repo::{self, RegisterOutcome};
 )]
 pub async fn register(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<DeviceRegisterRequest>,
 ) -> AppResult<(StatusCode, Json<DeviceRegisterResponse>)> {
     let started = Instant::now();
@@ -66,30 +79,43 @@ pub async fn register(
     // Pre-req-10: validate device_name length.
     req.validate()?;
 
-    let token = generate_token();
+    // 可选 Bearer：已存在设备的 token 凭据（复述/轮换的唯一钥匙）。
+    let bearer = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty());
 
-    let outcome = device_repo::upsert(&state.pool, &req, &token, state.clock.as_ref()).await?;
+    let new_token = generate_token();
+
+    let outcome =
+        device_repo::upsert(&state.pool, &req, bearer, &new_token, state.clock.as_ref()).await?;
 
     let (device, status) = match outcome {
         RegisterOutcome::Created(d) => {
-            state.cache.put_token(&token, req.device_id).await;
+            state.cache.put_token(&d.pairing_token, req.device_id).await;
             state
                 .metrics
                 .devices_registered_total
                 .fetch_add(1, Ordering::Relaxed);
             (d, StatusCode::CREATED)
         }
-        RegisterOutcome::Reused { device, old_token } => {
-            // Pre-req-3：续期时失效旧 token 缓存。
-            if let Some(ref old) = old_token {
+        RegisterOutcome::Reused(d) => {
+            // 回显 token：预热缓存（调用方已持有，无新披露）。
+            state.cache.put_token(&d.pairing_token, req.device_id).await;
+            (d, StatusCode::OK)
+        }
+        RegisterOutcome::Rotated(d) => {
+            // 轮换：旧 token（= 请求携带者）失效，缓存切换到新 token。
+            if let Some(old) = bearer {
                 state.cache.invalidate_token(old).await;
             }
-            state
-                .cache
-                .put_token(&device.pairing_token, device.id)
-                .await;
-            (device, StatusCode::OK)
+            state.cache.put_token(&d.pairing_token, req.device_id).await;
+            (d, StatusCode::OK)
         }
+        // token 只发给持有者：无凭据的重复注册一律 401。
+        RegisterOutcome::Unverified => return Err(AppError::TokenInvalid),
     };
 
     let is_new = status == StatusCode::CREATED;

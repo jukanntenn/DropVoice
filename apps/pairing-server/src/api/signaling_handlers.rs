@@ -1,18 +1,21 @@
 //! WebRTC 信令端点（webrtc-scan-direct-design §4.1）。
 //!
-//! 四个端点：
+//! 五个端点：
 //! - `POST /api/devices/{id}/webrtc/offer` —— 手机发起
 //! - `GET  /api/devices/{id}/webrtc/answer/{session_id}` —— 手机长轮询（hold 30s）
-//! - `GET  /api/devices/{id}/webrtc/events` —— 桌面 SSE 长连接（query token）
+//! - `POST /api/devices/{id}/webrtc/subscribe` —— 桌面换取 SSE 一次性票据（Bearer）
+//! - `GET  /api/devices/{id}/webrtc/events` —— 桌面 SSE 长连接（query ticket）
 //! - `POST /api/devices/{id}/webrtc/answer` —— 桌面回填（Bearer）
 //!
-//! 速率豁免（§4.8）：SSE + answer 长轮询建在独立 Router（build_exempt_router），
-//! merge 到 app，不继承 route_layer(rate_limit)。POST offer 保持限速。
+//! 速率豁免（§4.8）：SSE + answer 长轮询 + 票据/回填建在独立 Router
+//! （build_exempt_router），merge 到 app，不继承 route_layer(rate_limit)。
+//! POST offer 保持限速。豁免端点各自有并发帽兜底（config::MAX_CONCURRENT_*）。
 
 use std::convert::Infallible;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
@@ -21,10 +24,13 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::api::auth::{AuthenticatedDevice, AuthenticatedDeviceFromQuery};
+use crate::api::auth::AuthenticatedDevice;
 use crate::api::signaling::{AnswerStatus, OfferEvent};
 use crate::api::state::AppState;
-use crate::config::{LONG_POLL_HOLD, SDP_MAX_BYTES, SSE_MAX_LIFETIME, SSE_PING_INTERVAL};
+use crate::config::{
+    LONG_POLL_HOLD, MAX_CONCURRENT_POLLS, MAX_CONCURRENT_SSE, SDP_MAX_BYTES, SSE_MAX_LIFETIME,
+    SSE_PING_INTERVAL,
+};
 use crate::docs::{BadRequest, DeviceOffline, NotFound, RateLimited, Unauthorized};
 use crate::error::{AppError, AppResult};
 use crate::store::device_repo;
@@ -193,6 +199,7 @@ pub async fn create_offer(
 
 /// 手机长轮询：hold 最多 30s，answer 就绪立即返回，无则 204 超时。
 /// session_id 本身即为凭据（高熵不可猜），无需额外认证（§4.1 认证策略差异说明）。
+/// 并发等待受全局上限保护（豁免限流端点的资源封顶）。
 #[utoipa::path(
     get,
     path = "/api/devices/{device_id}/webrtc/answer/{session_id}",
@@ -203,7 +210,8 @@ pub async fn create_offer(
         - answer 就绪 → 200 立即返回（accepted/rejected）\n\
         - 30s 内无 answer → 204（桌面离线或 SSE 未就绪）\n\
         - session 过期/不存在 → 404\n\
-        session_id 是手机刚 POST offer 拿到的（高熵），无需额外认证。",
+        session_id 是手机刚 POST offer 拿到的（高熵），无需额外认证。\n\
+        全局并发等待有上限，超限返回 429。",
     params(
         ("device_id" = Uuid, Path, format = "uuid", description = "目标桌面设备 ID"),
         ("session_id" = String, Path, description = "POST offer 返回的会话 ID")
@@ -211,7 +219,8 @@ pub async fn create_offer(
     responses(
         (status = 200, description = "answer 就绪", body = AnswerResponse),
         (status = 204, description = "answer 尚未就绪（30s 超时），继续轮询"),
-        (status = 404, response = NotFound)
+        (status = 404, response = NotFound),
+        (status = 429, response = RateLimited)
     )
 )]
 #[tracing::instrument(
@@ -223,6 +232,12 @@ pub async fn poll_answer(
     State(state): State<AppState>,
     Path((_device_id, session_id)): Path<(Uuid, String)>,
 ) -> AppResult<Response> {
+    // 全局并发等待帽（守卫 Drop 保证释放；上限外直接 429，不占资源）。
+    if state.poll_active.load(Ordering::Relaxed) >= MAX_CONCURRENT_POLLS {
+        return Err(AppError::RateLimited);
+    }
+    let _poll_guard = ConnGuard::new(&state.poll_active);
+
     // 双检模式（§4.6）：先查共享状态，再 await Notify。
     let (answer, notify) = state
         .signaling
@@ -256,6 +271,24 @@ pub async fn poll_answer(
     }
 }
 
+/// 并发计数守卫：构造 +1，Drop -1（早退/异常路径同样释放）。
+struct ConnGuard<'a> {
+    gauge: &'a std::sync::atomic::AtomicUsize,
+}
+
+impl<'a> ConnGuard<'a> {
+    fn new(gauge: &'a std::sync::atomic::AtomicUsize) -> Self {
+        gauge.fetch_add(1, Ordering::Relaxed);
+        Self { gauge }
+    }
+}
+
+impl Drop for ConnGuard<'_> {
+    fn drop(&mut self) {
+        self.gauge.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
 /// 将 AnswerStatus 转为响应 JSON。
 fn answer_response(ans: AnswerStatus) -> AnswerResponse {
     match ans {
@@ -273,29 +306,85 @@ fn answer_response(ans: AnswerStatus) -> AnswerResponse {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// 端点 3：GET /api/devices/{id}/webrtc/events（桌面 SSE 长连接）
+// 端点 3：POST /api/devices/{id}/webrtc/subscribe（桌面换取 SSE 票据）
 // ──────────────────────────────────────────────────────────────────────────
 
+/// `POST /webrtc/subscribe` 响应体。
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct TicketResponse {
+    /// 一次性 SSE 订阅票据（60s TTL，单次使用）。
+    pub ticket: String,
+}
+
+/// 桌面换取 SSE 订阅票据（Bearer）。SSE 用 `?ticket=` 建连。
+///
+/// 长效 pairing_token 不进 URL：Caddy 访问日志记录完整 uri（含 query），
+/// token 出现在日志即等于泄露。票据单次使用、60s 过期，出现在日志中无害。
+#[utoipa::path(
+    post,
+    path = "/api/devices/{device_id}/webrtc/subscribe",
+    tag = "webrtc-signaling",
+    operation_id = "subscribeTicket",
+    summary = "桌面换取 SSE 一次性订阅票据",
+    description = "桌面持 Bearer pairing_token 调用，换取 60 秒单次使用的订阅票据，\n\
+        随后以 `GET .../webrtc/events?ticket=` 建立 SSE 长连接。\n\
+        票据与 device_id 绑定，兑换即失效。",
+    params(
+        ("device_id" = Uuid, Path, format = "uuid", description = "桌面自身设备 ID")
+    ),
+    security(("bearerAuth" = [])),
+    responses(
+        (status = 200, description = "票据签发", body = TicketResponse),
+        (status = 401, response = Unauthorized)
+    )
+)]
+#[tracing::instrument(name = "webrtc.subscribe", skip_all, fields(device_id = %device_id))]
+pub async fn subscribe_ticket(
+    State(state): State<AppState>,
+    Path(device_id): Path<Uuid>,
+    auth: AuthenticatedDevice,
+) -> AppResult<Json<TicketResponse>> {
+    // Bearer 对应设备必须与路径一致。
+    if auth.0 != device_id {
+        return Err(AppError::TokenInvalid);
+    }
+    let ticket = state.signaling.issue_ticket(device_id).await;
+    Ok(Json(TicketResponse { ticket }))
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// 端点 4：GET /api/devices/{id}/webrtc/events（桌面 SSE 长连接）
+// ──────────────────────────────────────────────────────────────────────────
+
+/// events 端点的 query 参数（一次性票据）。
+#[derive(Debug, Default, Deserialize)]
+pub struct EventsQuery {
+    /// `POST .../webrtc/subscribe` 签发的一次性票据。
+    ticket: Option<String>,
+}
+
 /// 桌面 SSE 长连接：推送 incoming offer，每 15s 心跳。
-/// 认证：query `token`（pairing_token），不能复用 Bearer extractor（EventSource 无 header）。
+/// 认证：query `ticket`（一次性，Bearer 换取；长效 token 不进 URL/日志）。
 #[utoipa::path(
     get,
     path = "/api/devices/{device_id}/webrtc/events",
     tag = "webrtc-signaling",
     operation_id = "subscribeEvents",
-    summary = "桌面 SSE 长连接（query token 认证）",
+    summary = "桌面 SSE 长连接（一次性票据认证）",
     description = "桌面维持 1 条 SSE 长连接，接收手机的 incoming offer。\n\
-        认证用 query 参数 `?token=<pairing_token>`（EventSource 不支持自定义 header，§4.2）。\n\
+        认证用 query 参数 `?ticket=`（由 `POST .../webrtc/subscribe` 以 Bearer 换取，\n\
+        60s 单次使用——长效 pairing_token 不进 URL，避免进入访问日志）。\n\
         每 15s 发具名 `ping` 事件（防 CF 125s 超时 + 连接活性监测）。\n\
         offer 事件 data 格式：`{session_id, credential, sdp}`。",
     params(
         ("device_id" = Uuid, Path, format = "uuid", description = "桌面自身设备 ID"),
-        ("token" = String, Query, description = "pairing_token（Bearer 替代，SSE 专用）")
+        ("ticket" = String, Query, description = "一次性订阅票据（Bearer 换取）")
     ),
     responses(
         (status = 200, description = "SSE 事件流", content_type = "text/event-stream",
             example = "event: offer\ndata: {\"session_id\":\"...\",\"credential\":\"123456\",\"sdp\":\"v=0...\"}\n\nevent: ping\ndata: {\"ts\":1723000000}\n\n"),
-        (status = 401, response = Unauthorized)
+        (status = 401, response = Unauthorized),
+        (status = 429, response = RateLimited)
     )
 )]
 #[tracing::instrument(
@@ -306,12 +395,25 @@ fn answer_response(ans: AnswerStatus) -> AnswerResponse {
 pub async fn subscribe_events(
     State(state): State<AppState>,
     Path(device_id): Path<Uuid>,
-    auth: AuthenticatedDeviceFromQuery,
+    Query(query): Query<EventsQuery>,
 ) -> Result<impl IntoResponse, AppError> {
-    // query token 对应的 device_id 必须与路径 device_id 一致。
-    if auth.0 != device_id {
+    // 一次性票据兑换：单次使用、限期、设备绑定。
+    let ticket = query
+        .ticket
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .ok_or(AppError::TokenInvalid)?;
+    if !state.signaling.redeem_ticket(ticket, device_id).await {
         return Err(AppError::TokenInvalid);
     }
+
+    // 全局并发 SSE 帽：超限拒绝（每桌面本就只允许 1 条，上限即防滥用）。
+    if state.sse_active.load(Ordering::Relaxed) >= MAX_CONCURRENT_SSE {
+        return Err(AppError::RateLimited);
+    }
+    let sse_gauge = state.sse_active.clone();
+    sse_gauge.fetch_add(1, Ordering::Relaxed);
 
     // 订阅该 device 的 offer 推送。
     let sub = state.signaling.subscribe_offers(device_id).await;
@@ -320,7 +422,7 @@ pub async fn subscribe_events(
     // 构建事件流：spawn 一个任务用 tokio::select! 合并 offer 推送 + 15s ping，
     // 写入 mpsc 通道；Sse 消费 ReceiverStream。
     // 当 SSE 连接断开，axum drop 响应 future → ReceiverStream drop → rx drop →
-    // 任务 select 分支都返回 None/关闭 → 任务退出。
+    // 任务 select 分支都返回 None/关闭 → 任务退出（释放并发计数）。
     let (event_tx, event_rx) = mpsc::channel::<Result<Event, Infallible>>(32);
     tokio::spawn(async move {
         let mut rx = sub.rx;
@@ -359,7 +461,8 @@ pub async fn subscribe_events(
                 }
                 _ = lifetime.tick() => {
                     // 到达生命周期：发 retry 提示（客户端 ~1s 后重连），优雅关闭。
-                    if event_tx.send(Ok(Event::default().retry(Duration::from_millis(1000)))).await.is_err() {
+                    let retry_evt = Event::default().retry(Duration::from_millis(1000));
+                    if event_tx.send(Ok(retry_evt)).await.is_err() {
                         break;
                     }
                     break;
@@ -370,6 +473,8 @@ pub async fn subscribe_events(
         // §7：带 sub_id 做 compare-and-delete——若本订阅已被新订阅替换
         //（sub_id 不匹配），则不删除新订阅，避免老任务误杀新连接。
         store.unsubscribe_offers(device_id, sub_id).await;
+        // 释放全局 SSE 并发计数。
+        sse_gauge.fetch_sub(1, Ordering::Relaxed);
     });
 
     let stream = tokio_stream::wrappers::ReceiverStream::new(event_rx);

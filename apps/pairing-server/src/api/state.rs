@@ -1,5 +1,6 @@
 //! 应用共享状态。
 
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 
 use sqlx::SqlitePool;
@@ -24,6 +25,10 @@ pub struct AppState {
     pub rate_limit_per_sec: u32,
     /// 信令会话存储 + SSE offer 推送桥（§4.6）。
     pub signaling: SignalStore,
+    /// 当前并发 SSE 连接数（上限 `config::MAX_CONCURRENT_SSE`）。
+    pub sse_active: Arc<AtomicUsize>,
+    /// 当前并发 answer 长轮询等待数（上限 `config::MAX_CONCURRENT_POLLS`）。
+    pub poll_active: Arc<AtomicUsize>,
 }
 
 impl AppState {
@@ -49,6 +54,8 @@ impl AppState {
             rate_limiter: RateLimiter::new(),
             rate_limit_per_sec,
             signaling: SignalStore::new(),
+            sse_active: Arc::new(AtomicUsize::new(0)),
+            poll_active: Arc::new(AtomicUsize::new(0)),
         }
     }
 }
