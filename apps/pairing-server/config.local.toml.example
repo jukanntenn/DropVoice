@@ -1,26 +1,28 @@
-# DropVoice pairing-server 本地开发配置模板。
+# DropVoice pairing-server 裸跑（cargo run）可选配置模板。
 #
-# 用法：cp config.local.toml.example config.local.toml（本文件同目录）。
-# config.local.toml 已 gitignore；裸跑（cargo run）时自动加载（见 src/config.rs）。
+# dev 环境不再需要本文件：.vscode/tasks.json 的 dev:pairing-server 任务
+# 已用 env 完整注入（LISTEN_ADDR=127.0.0.1:7380、DATABASE_URL=dev.db、
+# RATE_LIMIT_PER_SEC=10、ENABLE_DOCS=true），env 优先级高于 TOML（见
+# src/config.rs）。本文件仅作不经任务、手工裸跑时的可选便利。
 #
 # 加载优先级（低→高）：内置默认值 → /app/config.toml（容器）→
 # config.local.toml（开发裸跑）→ 环境变量覆盖（LISTEN_ADDR / DATABASE_URL /
-# RATE_LIMIT_PER_SEC / CORS_ORIGINS，仅临时覆盖的逃生舱）。
+# RATE_LIMIT_PER_SEC / CORS_ORIGINS，dev 编排注入的正是这一层）。
 # 可删除任意字段（回落内置默认值）；文件损坏则启动即失败。
-# 调试开关（ENABLE_DOCS / RUST_LOG）只走 env，不入 TOML —— Swagger UI 用
-# `ENABLE_DOCS=true cargo run`（tasks.json 的 dev:pairing-server 已内置）。
+# 调试开关（ENABLE_DOCS / RUST_LOG）只走 env，不入 TOML。
 
-# axum 监听地址（仅回环；经 Caddy 反代的部署形态固定 127.0.0.1:38424，勿改）
-listen_addr = "127.0.0.1:38424"
+# axum 监听地址（仅回环；容器内固定 127.0.0.1:38424 经 Caddy 反代，勿改；
+# dev 裸跑用 7380，与 tasks.json 对齐）
+listen_addr = "127.0.0.1:7380"
 
 # SQLite 数据库路径（默认：平台数据目录；mode=rwc 不存在即建）
-# database_url = "sqlite://apps/pairing-server/data/pairing.db?mode=rwc"
+# database_url = "sqlite://apps/pairing-server/dev.db?mode=rwc"
 
 # 速率限制（每 IP 每秒请求数；内置默认 1。本地跑 e2e / 压测时调大）
 rate_limit_per_sec = 10000
 
-# CORS origin 列表（§10.5：桌面 webview 跨端口/跨域直连信令服务器时需要；
-# 手机 PWA 与 API 同域无 CORS。空列表 = 不启用）。
-#   - tauri dev（http://localhost:5173）
-#   - 打包桌面（Windows WebView2：http://tauri.localhost / tauri://localhost）
-cors_origins = ["http://localhost:5173", "http://tauri.localhost", "tauri://localhost"]
+# CORS origin 列表（空 = 不启用）。标准拓扑无需 CORS：手机 PWA 与 /api 恒
+# 同源（app 域名反代），桌面 webview 是纯视图（信令全在 Rust 进程）。
+# 仅特殊实验（如浏览器直连 API 调试）才需要填：
+# cors_origins = ["http://localhost:5173"]
+cors_origins = []

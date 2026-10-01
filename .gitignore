@@ -34,10 +34,13 @@ Thumbs.db
 *.log
 logs/
 
+# Python bytecode (scripts/, docker/ helpers)
+__pycache__/
+*.pyc
+
 # Docker runtime artifacts (self-host / acceptance runtime dirs)
 apps/pairing-server/docker/data/
 apps/pairing-server/docker/log/
-apps/pairing-server/docker/__pycache__/
 
 # Test artifacts
 coverage/
@@ -76,3 +79,7 @@ apps/mobile/public/icons/generated/
 
 # Local dev config for bare `cargo run` (template: config.local.toml.example)
 apps/pairing-server/config.local.toml
+apps/target-itest/
+
+# Dev database (tasks.json dev:pairing-server env DATABASE_URL)
+apps/pairing-server/dev.db

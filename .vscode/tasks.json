@@ -3,12 +3,12 @@
   "tasks": [
     {
       "label": "dev:desktop",
-      "detail": "Tauri app → local pairing-server (localhost:38424)",
+      "detail": "Tauri app → local pairing-server (localhost:7380)",
       "type": "shell",
       "command": "pnpm dev:tauri",
       "options": {
         "env": {
-          "PAIRING_SERVER_URL": "http://localhost:38424"
+          "PAIRING_SERVER_URL": "http://localhost:7380"
         }
       },
       "isBackground": true,
@@ -28,11 +28,14 @@
     },
     {
       "label": "dev:pairing-server",
-      "detail": "Pairing server (Rust, port 38424)",
+      "detail": "Pairing server (Rust, 127.0.0.1:7380; fully configured via env — self-contained)",
       "type": "shell",
       "command": "cargo run --manifest-path apps/pairing-server/Cargo.toml",
       "options": {
         "env": {
+          "LISTEN_ADDR": "127.0.0.1:7380",
+          "DATABASE_URL": "sqlite://apps/pairing-server/dev.db?mode=rwc",
+          "RATE_LIMIT_PER_SEC": "10",
           "ENABLE_DOCS": "true"
         }
       },
@@ -52,9 +55,14 @@
     },
     {
       "label": "dev:mobile",
-      "detail": "Mobile PWA (Vite, :5174; /api proxied to :38424)",
+      "detail": "Mobile PWA (Vite, :5174; /api proxied to :7380)",
       "type": "shell",
       "command": "pnpm dev:mobile",
+      "options": {
+        "env": {
+          "VITE_API_PROXY_TARGET": "http://localhost:7380"
+        }
+      },
       "isBackground": true,
       "problemMatcher": [
         {
@@ -71,7 +79,7 @@
     },
     {
       "label": "dev:full",
-      "detail": "Desktop + pairing server + mobile (parallel)",
+      "detail": "Desktop + pairing server + mobile (parallel; bound to Alt+R)",
       "dependsOn": ["dev:desktop", "dev:pairing-server", "dev:mobile"],
       "dependsOrder": "parallel",
       "problemMatcher": []

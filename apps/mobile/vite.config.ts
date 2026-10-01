@@ -5,11 +5,11 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 // 开发 / 本地验收：/api 反代到 pairing-server，PWA 走同源。
-// 默认直连裸后端（cargo run，http://localhost:38424）。容器验收
-// （pnpm accept:up，HTTP :8080）时覆盖 target —— .vscode/tasks.json 的
-// accept:mobile task 已内置：
+// 默认直连裸后端（cargo run，dev 端口 7380，见 .vscode/tasks.json 的
+// dev:pairing-server env 注入）。容器验收（pnpm accept:up，HTTP :8080）时
+// 覆盖 target —— .vscode/tasks.json 的 accept:mobile task 已内置：
 //   VITE_API_PROXY_TARGET=http://localhost:8080
-const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:38424';
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:7380';
 
 // https://vite.dev/config/
 export default defineConfig({
