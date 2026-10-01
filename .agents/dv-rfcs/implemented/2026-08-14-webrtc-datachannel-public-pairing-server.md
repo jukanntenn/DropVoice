@@ -34,5 +34,6 @@ Both desktop legs (heartbeat registration + SSE subscription) live in the deskto
 - The pairing-server stays a pure rendezvous: it relays offers/answers and device registry state, and nothing else; its load is independent of typing volume. Data-plane evolution (e.g. binary frames) never touches it.
 - The desktop binds no local data port; tray-hide and sleep/wake no longer interrupt connectivity, because both long-lived legs (heartbeat, SSE) live in the Rust process and rebuild on tokio timers.
 - Long-lived credentials stay out of URLs and logs (one-time SSE tickets); tokens are hash-only at rest; token reuse attempts 401 and reset the desktop identity.
-- The phone remains a same-origin PWA (dev: Vite proxy; deployed: app host reverse proxy) — no build-time API base exists, and the DataChannel carries the actual traffic.
+- The public rendezvous surface is bounded by construction: devices unseen for 30 days are garbage-collected, the in-process rate limiter caps its own key set (overflow resets rather than grows), and the rate-exempt endpoints (SSE, answer long-poll) sit under global concurrency ceilings — 429 beyond them, never unbounded resource use.
+- The phone remains a same-origin PWA (dev: Vite proxy; deployed: app host reverse proxy — the host layout is its own record, [2026-08-30](2026-08-30-deterministic-three-host-public-topology.md)) — no build-time API base exists, and the DataChannel carries the actual traffic.
 - Any future transport change that moves data off the P2P channel must supersede this record, not amend it.

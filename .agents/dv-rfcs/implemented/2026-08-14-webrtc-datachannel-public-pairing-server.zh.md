@@ -34,5 +34,6 @@ Status: implemented
 - pairing-server 保持纯会合点：只中继 offer/answer 与设备注册态，别无他物；其负载与打字量无关。数据面演进（如二进制帧）永远碰不到它。
 - 桌面不绑定本地数据端口；托盘隐藏与休眠唤醒不再中断连接——两条长连腿（心跳、SSE）都在 Rust 进程内、靠 tokio 定时器重建。
 - 长效凭据不进 URL 与日志（一次性 SSE 票据）；token 落库只存哈希；token 复用尝试得到 401 并重置桌面身份。
-- 手机保持同源 PWA（开发：Vite 代理；部署：app 主机反向代理）——不存在构建期 API base，实际流量走 DataChannel。
+- 会合点的公网面按构造有界：30 天未上线的设备被 GC；进程内限流器对自身键数封顶（溢出重置而非膨胀）；豁免限流的端点（SSE、answer 长轮询）受全局并发帽保护——超限 429，绝不无界占用资源。
+- 手机保持同源 PWA（开发：Vite 代理；部署：app 主机反向代理——主机布局另有专档，[2026-08-30](2026-08-30-deterministic-three-host-public-topology.zh.md)）——不存在构建期 API base，实际流量走 DataChannel。
 - 未来任何把数据挪出 P2P 通道的传输变更必须取代本记录，而不是修改它。
