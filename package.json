@@ -1,6 +1,6 @@
 {
   "name": "dropvoice",
-  "version": "0.2.0",
+  "version": "0.1.0-rc.1",
   "private": true,
   "description": "Send voice-to-text input from your mobile phone to a PC",
   "scripts": {
@@ -41,8 +41,8 @@
     "version:minor": "pnpm version minor && pnpm version:sync",
     "version:major": "pnpm version major && pnpm version:sync",
     "version:sync": "node scripts/sync-version.js",
-    "version:pre:alpha": "pnpm version prerelease --preid=alpha",
-    "version:pre:beta": "pnpm version prerelease --preid=beta",
+    "version:pre:alpha": "pnpm version prerelease --preid=alpha && pnpm version:sync",
+    "version:pre:beta": "pnpm version prerelease --preid=beta && pnpm version:sync",
     "changelog": "conventional-changelog -p angular -i CHANGELOG.md -s",
     "changelog:first": "conventional-changelog -p angular -i CHANGELOG.md -s -r 0",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.js",
