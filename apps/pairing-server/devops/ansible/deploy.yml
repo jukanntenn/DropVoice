@@ -42,18 +42,21 @@
         src: docker-compose.yml.j2
         dest: "{{ compose_file }}"
         mode: "0644"
+      register: compose_template
 
     - name: Template config.toml (application config → /app/config.toml)
       ansible.builtin.template:
         src: config.toml.j2
         dest: "{{ config_file }}"
         mode: "0644"
+      register: config_template
 
     - name: Template Caddyfile (three-host form; staging HTTP / production TLS)
       ansible.builtin.template:
         src: Caddyfile.j2
         dest: "{{ caddyfile }}"
         mode: "0644"
+      register: caddy_template
 
     - name: Pull image (daemon-level, honors insecure-registries)
       community.docker.docker_image:
@@ -72,6 +75,19 @@
         pull: never
         state: present
         remove_orphans: true
+
+    # Compose recreates containers only on spec changes — NOT when a
+    # bind-mounted file's content changes (Caddyfile, config.toml). Restart
+    # explicitly when any rendered file changed so re-deploys take effect.
+    - name: Restart container to pick up re-rendered bind-mounted configs
+      ansible.builtin.command:
+        cmd: docker compose restart
+        chdir: "{{ app_path }}"
+      when: >-
+        compose_template is changed
+        or config_template is changed
+        or caddy_template is changed
+      changed_when: true
 
     # Post-deploy verification from the controller (not the container network):
     # compose's healthcheck only proves the in-container probe passes; this
