@@ -86,6 +86,10 @@ jobs:
             libxdo-dev
       - uses: astral-sh/setup-uv@v5
       - run: pnpm install --frozen-lockfile
+      # generate_context! embeds frontendDist (../dist) at compile time —
+      # clippy on the desktop crate fails with a proc-macro panic unless the
+      # frontend is built first.
+      - run: pnpm --filter @dropvoice/desktop build
       - name: Validate prek configs
         run: uvx prek@0.4.12 validate-config prek.toml apps/*/prek.toml packages/*/prek.toml
       - name: prek run --all-files (format + lint + gates)
@@ -106,6 +110,15 @@ jobs:
         os: [windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # generate_context! embeds frontendDist (../dist) at compile time —
+      # fmt/clippy/test on the desktop crate need the frontend built first.
+      - run: pnpm --filter @dropvoice/desktop build
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
