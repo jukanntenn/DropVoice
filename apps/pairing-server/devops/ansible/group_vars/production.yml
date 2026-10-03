@@ -35,10 +35,11 @@ public_url: "https://{{ landing_domain }}"
 host_port: "127.0.0.1:8089"
 caddy_port: 8080
 
-# 上游可信代理段：宿主 Caddy → 容器的连接源是 docker 网桥网关（真实客户端
-# IP 已由宿主 Caddy 从 CF-Connecting-IP 写入 XFF）。TODO(ops)：首次部署后按
-# 实际网关 IP 收窄为单个 /32。
-trusted_proxies_cidrs: "172.16.0.0/12 127.0.0.1/8 ::1/128"
+# 上游可信代理段：宿主 Caddy → 容器的连接源是 docker 网桥网关 172.20.0.1
+# （dropvoice_default 网络，2026-10-03 首次部署实测；若网络重建后网段漂移，
+# 症状是 XFF 失信、限流塌缩，届时按新网关更新）。真实客户端 IP 已由宿主
+# Caddy 从 CF-Connecting-IP 写入 XFF；仅信任该网关 /32，同宿主他容器无法伪造。
+trusted_proxies_cidrs: "172.20.0.1/32 127.0.0.1/8 ::1/128"
 
 debug: false
 
