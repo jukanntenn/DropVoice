@@ -153,6 +153,9 @@ def main() -> int:
                 "r2",
                 "object",
                 "put",
+                # wrangler 4 默认打本地 Miniflare 模拟器（.wrangler/state），
+                # 必须显式 --remote 才写真实 R2——不加会上传"成功"而公网 404。
+                "--remote",
                 f"{args.bucket}/{key}",
                 "--file",
                 str(local),
