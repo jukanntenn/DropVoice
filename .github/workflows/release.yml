@@ -37,7 +37,9 @@ jobs:
         include:
           - platform: windows-latest
             target: windows
-            args: '--bundles msi nsis'
+            # NSIS only: WiX/MSI cannot represent prerelease semver
+            # (numeric-only parts <= 65535) and has no updater path.
+            args: '--bundles nsis'
 
           - platform: macos-14
             target: macos
