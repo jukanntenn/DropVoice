@@ -18,9 +18,9 @@
 
 services:
   dropvoice-pairing:
-    # Public images on Docker Hub (CI publishes on every v* tag; `latest`
-    # tracks the newest stable release). Also on ghcr.io.
-    image: docker.io/jukanntenn/dropvoice-pairing-server:latest
+    # Public image on ghcr.io (CI publishes on every v* tag; `latest` tracks
+    # the newest stable release). The package is public in GitHub package settings.
+    image: ghcr.io/jukanntenn/dropvoice-pairing-server:latest
     container_name: dropvoice-pairing
     ports:
       - "${PAIRING_PORT:-8080}:8080"
