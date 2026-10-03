@@ -1,7 +1,7 @@
 ---
 name: iterating
 description: Iterate the user's input into a delivered artifact — explore the project and reference repos, discuss and decide each point with them grounded in fact, then land the decisions as a spec or an implementation. Use when the user wants to take a request all the way to a finished spec or code through grounded discussion, or passes requirements to work through together.
-argument-hint: "Requirements or design points to discuss"
+argument-hint: 'Requirements or design points to discuss'
 ---
 
 The operational form of the project's PRINCIPLES — ground every conclusion in fact, defer to community convention, design from first principles, fix the root cause; read PRINCIPLES.md for the values, what follows is the how.

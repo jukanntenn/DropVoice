@@ -23,7 +23,8 @@ _gate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_gate)
 
 PAIRS, REPO_ROOT = _gate.PAIRS, _gate.REPO_ROOT
-SKILLS_SOURCE, SKILLS_MIRROR = _gate.SKILLS_SOURCE, _gate.SKILLS_MIRROR
+SKILLS_SOURCE = Path(_gate.SKILLS_SOURCE)
+SKILLS_MIRROR = Path(_gate.SKILLS_MIRROR)
 
 
 def main() -> int:
