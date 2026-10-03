@@ -148,17 +148,17 @@ Environments (single playbook, differences confined to `group_vars/<env>.yml`):
   - dev loop: VS Code task `dev:full` / `Alt+R` (= pairing-server `cargo run` → :7380 + desktop + mobile); phone opens `http://<dev-ip>:5174` (vite proxies `/api` to :7380). All config injected by the task env, not by hand.
   - container acceptance (artifact): `pnpm accept:up` (HTTP :8080, config from the committed `docker/config.acceptance.toml`); desktop/mobile via the `accept:desktop` / `accept:mobile` tasks.
 - **staging** = fn @ 192.168.5.200 — dogfooding; production-isomorphic three-host layout on `*.dropvoice.bytehome.fun` (`dropvoice.`=landing, `app.`=PWA+/api, `ps.`=API; wildcard DNS + tunnel cert ops-managed, TLS terminated by the intranet tunnel). Caddyfile is the HTTP rendering of `templates/Caddyfile.j2`. Deploys the rolling `main` tag from the LAN registry. Flip domain/TLS/trusted-proxy values and it fits behind Cloudflare unchanged.
-- **production** — public VPS behind Cloudflare (dropvoice.online): `dropvoice.online`=landing, `app.`=PWA+/api, `ps.`=pure API. Cloudflare-only origin (`:4443`, Origin CA cert, Origin Rule port rewrite, Full strict); Caddyfile is the TLS rendering of `templates/Caddyfile.j2`. Deploys pinned version tags from Docker Hub (CI publishes releases to both ghcr.io and Docker Hub; prod pulls the public Docker Hub image, no registry login on the VPS).
+- **production** — public VPS behind Cloudflare (dropvoice.online, ttyo): `dropvoice.online`=landing, `app.`=PWA+/api, `ps.`=pure API. Traffic chain (markpost mode, same as the box's other services): Cloudflare reaches the origin on `:443` → the shared host Caddy terminates TLS (Origin CA cert) and reverse-proxies by hostname to the container's loopback-only `127.0.0.1:8089` → in-container Caddy (HTTP `:8080`) → axum. Deploys pinned version tags from ghcr.io (CI publishes releases there; prod pulls the public ghcr image anonymously — flip the package to public once in GitHub package settings; no registry login on the VPS).
 
 Image tag semantics:
 
 | Tag                    | Registry                     | Points at                                           | Moved by                             |
 | ---------------------- | ---------------------------- | --------------------------------------------------- | ------------------------------------ |
 | `main`                 | 192.168.5.50:5000 (LAN only) | whatever the local workspace last built             | `docker/build.py --push`             |
-| `0.1.3` / `0.1.3-rc.1` | ghcr.io + Docker Hub         | git tag `v0.1.3` / `v0.1.3-rc.1`                    | CI `docker-publish.yml` on `v*` push |
-| `latest`               | ghcr.io + Docker Hub         | newest **stable** release only (never a prerelease) | CI `docker-publish.yml`              |
+| `0.1.0` / `0.1.0-rc.1` | ghcr.io                      | git tag `v0.1.0` / `v0.1.0-rc.1`                    | CI `docker-publish.yml` on `v*` push |
+| `latest`               | ghcr.io                      | newest **stable** release only (never a prerelease) | CI `docker-publish.yml`              |
 
-Stability gate: exact `^v\d+\.\d+\.\d+$` moves `latest`. Prereleases use the hyphenated semver form (`v0.1.3-rc.1`, never `v0.1.3rc1`). CI multi-platform builds use native runners (amd64 + arm64, no QEMU); local cross-platform builds go through buildx + QEMU. `main` is never built by CI.
+Stability gate: exact `^v\d+\.\d+\.\d+$` moves `latest`. Prereleases use the hyphenated semver form (`v0.1.0-rc.1`, never `v0.1.0rc1`). CI multi-platform builds use native runners (amd64 + arm64, no QEMU); local cross-platform builds go through buildx + QEMU. `main` is never built by CI.
 
 Build → deploy → accept flow (all from the dev machine):
 
@@ -191,7 +191,7 @@ Human acceptance gate before production promotion: `apps/pairing-server/devops/r
 
 Mounts: repo root → `/workspace` (playbook edits live, no image rebuild; the repo-root ansible.cfg applies from this workdir), `~/.ssh` → `/ssh` (entrypoint copies keys + chmod 600 for Windows perms), `~/.ansible-vault` → `/vault`. See `apps/pairing-server/devops/runner/` and `devops/deploy.py`.
 
-Prerequisites (once): vault password file at `~/.ansible-vault/dropvoice-<env>.pwd` (e.g. `dropvoice-staging.pwd`); repo secrets `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` for CI image publishing (ghcr.io uses the built-in GITHUB_TOKEN).
+Prerequisites (once): vault password file at `~/.ansible-vault/dropvoice-<env>.pwd` (e.g. `dropvoice-staging.pwd`); image publishing needs no registry secrets (ghcr.io uses the built-in GITHUB_TOKEN).
 
 ## Versioning & release
 
@@ -200,7 +200,18 @@ pnpm version:patch      # Bump patch + sync versions across packages + changelog
 pnpm version:minor
 pnpm version:major
 # Release: push tag `v*` -> release.yml builds all platforms automatically,
-# docker-publish.yml publishes the pairing-server image (ghcr.io + Docker Hub).
+# docker-publish.yml publishes the pairing-server image (ghcr.io).
 ```
+
+An exact prerelease (e.g. `v0.1.0-rc.1`) is cut by hand: set the root version,
+run `pnpm version:sync` (syncs every version field, including all package.json
+files), commit, then `git tag v0.1.0-rc.1` — `pnpm version:pre:*` only
+increments from the current version.
+
+Desktop updater distribution rides the same stable tag: the `publish-r2` job in `release.yml` uploads the signed updater artifacts to Cloudflare R2 (`releases.dropvoice.online`) and moves `update/manifest.json`; prerelease tags never do. One-time prerequisites (R2 bucket + custom domain, `CLOUDFLARE_API_TOKEN` and `TAURI_SIGNING_PRIVATE_KEY` secrets): [production Cloudflare runbook](../apps/pairing-server/devops/runbooks/production-cloudflare.md). Rationale: [DV-RFC](../.agents/dv-rfcs/proposed/2026-10-03-desktop-updater-r2-edge-distribution.md).
+Before the first stable, the update chain is rehearsed by hand: install `rc.1`, cut `rc.2`,
+download its release assets and run `scripts/publish_updater_manifest.py --tag v0.1.0-rc.2
+--allow-prerelease` (with `CLOUDFLARE_API_TOKEN` exported), then watch the rc.1 client update;
+once a stable install base exists, the manifest moves only via CI's stable-tag gate.
 
 Commits follow Conventional Commits (commitlint-enforced); scopes: `(desktop)`, `(mobile)`, `(pairing-server)`, `(core)`, `(ui)`, `(i18n)`, `(ci)`, `(docs)`.

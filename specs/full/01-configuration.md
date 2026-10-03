@@ -1,7 +1,7 @@
 # 配置机制规范
 
-> 版本: 1.0.0
-> 最后更新: 2026-08-15
+> 版本: 1.0.1
+> 最后更新: 2026-10-03
 > 状态: 已批准
 
 ## 1. 概述
@@ -58,7 +58,7 @@ TOML 反序列化忽略未知字段。删除字段不需要迁移逻辑：旧文
 | 3 | `ENABLE_DOCS`（env-only） | true（task 内置） | true（compose 内置） | off | off | off |
 | 4 | `cors_origins` | localhost:5173 + tauri 两条（手写模板） | 同 dev（提交的验收模板） | public_url + tauri 两条 + `cors_extra_origins`（j2 推导） | public_url + tauri 两条（j2 推导） | 手写（默认注释掉） |
 | 5 | 镜像来源 + tag | — | 本地 build | LAN registry `main`（滚动） | Docker Hub `vX.Y.Z`（pin） | Docker Hub `latest` |
-| 6 | TLS 形态 | 无（HTTP） | 无（HTTP :8080） | 内网隧道外部终结（Caddy HTTP） | Cloudflare Origin CA（Caddy :4443） | 部署者自理 |
+| 6 | TLS 形态 | 无（HTTP） | 无（HTTP :8080） | 内网隧道外部终结（Caddy HTTP） | Cloudflare → 宿主共享 Caddy:443 终结（容器恒 HTTP，仅回环发布） | 部署者自理 |
 | 7 | 数据持久化 | 平台数据目录 | 无卷（`down -v` 清空） | named volume | named volume | named volume |
 | 8 | mobile API base | Vite proxy → `:38424` | Vite proxy → `:8080` | 同源（Caddy） | 同源（Caddy） | 同源（Caddy） |
 
@@ -160,11 +160,12 @@ Support/dropvoice/`；Linux `~/.config/dropvoice/`）。首跑不存在则写入
 
 ## 7. 部署配置（ansible）
 
-分层：`group_vars/all.yml`（拓扑常量：端口 38424/8080/4443、数据库路径、
+分层：`group_vars/all.yml`（拓扑常量：端口 38424/8080、数据库路径、
 rate=1）→ `group_vars/staging.yml`（LAN registry + `main` 滚动 tag + 隧道
 8888 + `cors_extra_origins`）→ `group_vars/production.yml`（Docker Hub +
-`expected_version` pin + origin TLS + Cloudflare CIDR）→ `host_vars/`（用户/
-家目录）。渲染产物：`config.toml`、`docker-compose.yml`、Caddyfile。
+`expected_version` pin + 回环发布 8089 + docker 网桥信任段；Cloudflare 段
+属宿主 Caddy，见 runbook）→ `host_vars/`（用户/家目录）。渲染产物：
+`config.toml`、`docker-compose.yml`、Caddyfile。
 
 部署经 `devops/deploy.py` 在容器化 runner 中跑 ansible（runner 的
 ansible-core / collection 版本 pin 在 `devops/runner/`，requirements.yml 是

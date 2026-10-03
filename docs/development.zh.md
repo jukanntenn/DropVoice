@@ -148,17 +148,17 @@ Windows 无法原生跑 ansible（POSIX fork/sh 依赖），所以部署在一�
   - dev 循环：VS Code 任务 `dev:full` / `Alt+R`（= pairing-server `cargo run` → :7380 + desktop + mobile）；手机打开 `http://<dev-ip>:5174`（vite 把 `/api` 代理到 :7380）。全部配置由任务 env 注入，不手工配置。
   - 容器验收（针对工件）：`pnpm accept:up`（HTTP :8080，配置来自已提交的 `docker/config.acceptance.toml`）；desktop/mobile 用 `accept:desktop` / `accept:mobile` 任务。
 - **staging** = fn @ 192.168.5.200——dogfooding；`*.dropvoice.bytehome.fun` 上与生产同构的三主机布局（`dropvoice.`=landing、`app.`=PWA+/api、`ps.`=API；泛解析 DNS + 隧道证书运维托管，TLS 由内网隧道终结）。Caddyfile 是 `templates/Caddyfile.j2` 的 HTTP 渲染。部署 LAN registry 的滚动 `main` 标签。翻转 domain/TLS/trusted-proxy 值即可原样搬进 Cloudflare。
-- **production**——Cloudflare 之后的公网 VPS（dropvoice.online）：`dropvoice.online`=landing、`app.`=PWA+/api、`ps.`=纯 API。仅 Cloudflare 回源（`:4443`、Origin CA 证书、Origin Rule 端口改写、Full strict）；Caddyfile 是 `templates/Caddyfile.j2` 的 TLS 渲染。部署 Docker Hub 的固定版本标签（CI 把 release 同时发布到 ghcr.io 与 Docker Hub；生产拉公共 Docker Hub 镜像，VPS 上无需 registry 登录）。
+- **production**——Cloudflare 之后的公网 VPS（dropvoice.online，ttyo）：`dropvoice.online`=landing、`app.`=PWA+/api、`ps.`=纯 API。流量链（markpost 模式，与该机既有服务一致）：Cloudflare 回源 `:443` → 宿主共享 Caddy 终结 TLS（Origin CA 证书）并按主机名反代到容器仅回环的 `127.0.0.1:8089` → 容器内 Caddy（HTTP `:8080`）→ axum。部署 ghcr.io 的固定版本标签（CI 把 release 发布到 ghcr.io；生产匿名拉取公共 ghcr 镜像——包需在 GitHub Packages 设置里改一次 Public；VPS 上无需 registry 登录）。
 
 镜像标签语义：
 
 | 标签                   | Registry                    | 指向                                   | 由谁移动                             |
 | ---------------------- | --------------------------- | -------------------------------------- | ------------------------------------ |
 | `main`                 | 192.168.5.50:5000（仅 LAN） | 本地 workspace 最近构建的内容          | `docker/build.py --push`             |
-| `0.1.3` / `0.1.3-rc.1` | ghcr.io + Docker Hub        | git tag `v0.1.3` / `v0.1.3-rc.1`       | CI `docker-publish.yml`（`v*` push） |
-| `latest`               | ghcr.io + Docker Hub        | 仅最新**稳定** release（绝不是预发布） | CI `docker-publish.yml`              |
+| `0.1.0` / `0.1.0-rc.1` | ghcr.io                     | git tag `v0.1.0` / `v0.1.0-rc.1`       | CI `docker-publish.yml`（`v*` push） |
+| `latest`               | ghcr.io                     | 仅最新**稳定** release（绝不是预发布） | CI `docker-publish.yml`              |
 
-稳定门控：精确的 `^v\d+\.\d+\.\d+$` 才移动 `latest`。预发布用连字符 semver 形态（`v0.1.3-rc.1`，绝不写 `v0.1.3rc1`）。CI 多平台构建用原生 runner（amd64 + arm64，无 QEMU）；本地跨平台构建走 buildx + QEMU。`main` 绝不由 CI 构建。
+稳定门控：精确的 `^v\d+\.\d+\.\d+$` 才移动 `latest`。预发布用连字符 semver 形态（`v0.1.0-rc.1`，绝不写 `v0.1.0rc1`）。CI 多平台构建用原生 runner（amd64 + arm64，无 QEMU）；本地跨平台构建走 buildx + QEMU。`main` 绝不由 CI 构建。
 
 构建 → 部署 → 验收流程（全部在开发机）：
 
@@ -191,7 +191,7 @@ python apps/pairing-server/devops/deploy.py staging --check --diff   # dry-run p
 
 挂载：仓库根 → `/workspace`（playbook 修改实时生效，无需重建镜像；仓库根 ansible.cfg 在此工作目录生效）、`~/.ssh` → `/ssh`（entrypoint 拷贝密钥并为 Windows 权限 chmod 600）、`~/.ansible-vault` → `/vault`。见 `apps/pairing-server/devops/runner/` 与 `devops/deploy.py`。
 
-前置（一次性）：`~/.ansible-vault/dropvoice-<env>.pwd` 的 vault 密码文件（如 `dropvoice-staging.pwd`）；CI 镜像发布所需 repo secrets `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN`（ghcr.io 用内建 GITHUB_TOKEN）。
+前置（一次性）：`~/.ansible-vault/dropvoice-<env>.pwd` 的 vault 密码文件（如 `dropvoice-staging.pwd`）；镜像发布无需 registry secret（ghcr.io 用内建 GITHUB_TOKEN）。
 
 ## 版本与发布
 
@@ -200,7 +200,17 @@ pnpm version:patch      # Bump patch + sync versions across packages + changelog
 pnpm version:minor
 pnpm version:major
 # Release: push tag `v*` -> release.yml builds all platforms automatically,
-# docker-publish.yml publishes the pairing-server image (ghcr.io + Docker Hub).
+# docker-publish.yml publishes the pairing-server image (ghcr.io).
 ```
+
+精确预发布版本（如 `v0.1.0-rc.1`）手工裁切：改根版本后跑 `pnpm version:sync`
+（同步所有版本字段，含各 package.json），提交后 `git tag v0.1.0-rc.1`——
+`pnpm version:pre:*` 只会从当前版本递增。
+
+桌面自动更新分发随同一个稳定版 tag 完成：`release.yml` 的 `publish-r2` job 把签名更新制品上传到 Cloudflare R2（`releases.dropvoice.online`）并移动 `update/manifest.json`；预发布 tag 永不移动。一次性前置（R2 bucket + 自定义域、`CLOUDFLARE_API_TOKEN` 与 `TAURI_SIGNING_PRIVATE_KEY` secrets）：[生产 Cloudflare runbook](../apps/pairing-server/devops/runbooks/production-cloudflare.md)。决策依据：[DV-RFC](../.agents/dv-rfcs/proposed/2026-10-03-desktop-updater-r2-edge-distribution.md)。
+首个稳定版发布前，更新链路靠手工彩排：安装 `rc.1` → 裁切 `rc.2` → 下载其 release 资产并执行
+`scripts/publish_updater_manifest.py --tag v0.1.0-rc.2 --allow-prerelease`（export
+`CLOUDFLARE_API_TOKEN`），观察 rc.1 客户端完成更新；一旦存在稳定版装机量，manifest 只经
+CI 的稳定版门移动。
 
 提交遵循 Conventional Commits（commitlint 强制）；scope：`(desktop)`、`(mobile)`、`(pairing-server)`、`(core)`、`(ui)`、`(i18n)`、`(ci)`、`(docs)`。
