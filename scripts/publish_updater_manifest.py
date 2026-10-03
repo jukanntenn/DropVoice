@@ -23,6 +23,7 @@ Usage:
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,10 @@ from pathlib import Path
 STABLE_TAG = re.compile(r"^v\d+\.\d+\.\d+$")
 IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
 MANIFEST_CACHE = "no-cache"
+
+# Windows 上 npx 是 npx.cmd，CreateProcess 不解析 PATHEXT——subprocess 直接
+# 传 "npx" 会 FileNotFoundError；shutil.which 解析出真实路径，两端通用。
+NPX = shutil.which("npx") or "npx"
 CONTENT_TYPES = {
     ".exe": "application/octet-stream",
     ".msi": "application/octet-stream",
@@ -142,7 +147,7 @@ def main() -> int:
             continue
         rc = subprocess.run(
             [
-                "npx",
+                NPX,
                 "--yes",
                 "wrangler@4",
                 "r2",
