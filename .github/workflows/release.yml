@@ -43,7 +43,11 @@ jobs:
 
           - platform: macos-14
             target: macos
-            args: '--target universal-apple-darwin --bundles dmg'
+            # `app` is not optional: the macOS updater artifacts (.app.tar.gz
+            # + .sig) are produced by the `app` bundle target — `dmg` alone
+            # makes the bundler warn "no updater-enabled targets were built"
+            # and ship no darwin entry in latest.json (bit us on rc.1).
+            args: '--target universal-apple-darwin --bundles app dmg'
 
           - platform: ubuntu-22.04
             target: linux
