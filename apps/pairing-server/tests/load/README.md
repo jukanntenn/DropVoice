@@ -6,16 +6,16 @@ k6 压测脚本，验证配对服务器容量目标（spec 11 §10.4）：
 ## 运行
 
 ```bash
-# 1. 启动本地同构测试环境（Caddy + axum，自签证书）
+# 1. 启动本地同构测试环境（Caddy + axum，HTTP）
 docker compose -f docker/docker-compose.local.yml up -d
 
 # 2. 运行注册洪流压测
 k6 run tests/load/register.js \
-  -e BASE_URL=https://localhost:4443
+  -e BASE_URL=http://localhost:8080
 
 # 3. 调大负载（模拟峰值 1014 QPS）
 k6 run tests/load/register.js \
-  -e BASE_URL=https://localhost:4443 \
+  -e BASE_URL=http://localhost:8080 \
   --vus 200 --duration 2m
 ```
 

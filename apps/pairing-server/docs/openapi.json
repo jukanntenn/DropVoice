@@ -2,19 +2,19 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DropVoice Pairing & Signaling Server API",
-    "description": "公网 HTTPS 配对 + WebRTC 信令服务器。部署在 VPS 上，经 Cloudflare 回源到 Caddy:4443，再反向代理到 axum 127.0.0.1:38424。\n\n## 职责边界\n本服务只做**设备注册 + WebRTC 信令转发**，绝不中继文本数据。\n手机扫码后发起 offer，服务器通过 SSE 转发给桌面，桌面回填 answer；\nSDP 交换完成后，手机↔桌面 WebRTC DataChannel P2P 直连，服务器退出。\n\n## 认证\n- `POST /api/devices`：新建设备无需认证；已存在设备须携带 Bearer（当前 token）方可复用/轮换，否则 401——token 绝不复述给无凭据方。\n- `PUT /api/devices/{id}/status`：Bearer token（注册时颁发的 `pairing_token`）。\n- `POST /api/devices/{id}/webrtc/offer`：body 带 code（首次配对）或 token（重连）。\n- `POST /api/devices/{id}/webrtc/subscribe`：Bearer token → 一次性 SSE 票据。\n- `GET /api/devices/{id}/webrtc/events`（SSE）：query `?ticket=`（一次性票据）。\n- `POST /api/devices/{id}/webrtc/answer`：Bearer token。\n- `GET /api/devices/{id}/webrtc/answer/{session_id}`：session_id 自身即为凭据。",
+    "description": "公网 HTTPS 配对 + WebRTC 信令服务器。部署在 VPS 上，经 Cloudflare 回源 宿主共享 Caddy:443（终结 TLS），反代容器内 Caddy:8080，再到 axum 127.0.0.1:38424。\n\n## 职责边界\n本服务只做**设备注册 + WebRTC 信令转发**，绝不中继文本数据。\n手机扫码后发起 offer，服务器通过 SSE 转发给桌面，桌面回填 answer；\nSDP 交换完成后，手机↔桌面 WebRTC DataChannel P2P 直连，服务器退出。\n\n## 认证\n- `POST /api/devices`：新建设备无需认证；已存在设备须携带 Bearer（当前 token）方可复用/轮换，否则 401——token 绝不复述给无凭据方。\n- `PUT /api/devices/{id}/status`：Bearer token（注册时颁发的 `pairing_token`）。\n- `POST /api/devices/{id}/webrtc/offer`：body 带 code（首次配对）或 token（重连）。\n- `POST /api/devices/{id}/webrtc/subscribe`：Bearer token → 一次性 SSE 票据。\n- `GET /api/devices/{id}/webrtc/events`（SSE）：query `?ticket=`（一次性票据）。\n- `POST /api/devices/{id}/webrtc/answer`：Bearer token。\n- `GET /api/devices/{id}/webrtc/answer/{session_id}`：session_id 自身即为凭据。",
     "contact": {
       "name": "DropVoice"
     },
     "license": {
       "name": "MIT"
     },
-    "version": "0.2.0"
+    "version": "0.1.0-rc.1"
   },
   "servers": [
     {
       "url": "https://ps.dropvoice.online",
-      "description": "生产环境（Cloudflare → Caddy:4443 → axum:38424）"
+      "description": "生产环境（Cloudflare → 宿主 Caddy:443 → 容器 Caddy:8080 → axum:38424）"
     }
   ],
   "paths": {

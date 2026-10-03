@@ -15,11 +15,10 @@ config_file: "{{ app_path }}/config.toml"
 # Internal topology is identical across every environment:
 #   - Rust axum backend listens loopback-only on 127.0.0.1:38424 (config.toml
 #     listen_addr, never published).
-#   - Caddy is the only published port: HTTP form :8080, TLS form :4443
-#     (acceptance self-signed / production Cloudflare Origin CA).
+#   - Caddy is the only published port, always the HTTP form (:8080 in every
+#     environment); TLS is terminated upstream — staging: intranet tunnel,
+#     production: the shared host Caddy on ttyo (Cloudflare reaches it on :443).
 backend_port: 38424
-caddy_port_http: 8080
-caddy_port_tls: 4443
 
 # SQLite database file lives at /app/data/pairing.db in the app container
 # (dropvoice-data named volume), never published on the host. markpost runs a

@@ -19,7 +19,8 @@
 
 ## 2. 真机 dogfooding（5-10 分钟）
 
-- [ ] 桌面：`pnpm build:tauri` → 本机安装安装包（信令默认指向 dropvoice.bytehome.fun）
+- [ ] 桌面：`pnpm build:tauri` → 本机安装安装包；`<config_dir>/dropvoice/config.toml`
+      设 `network.pairing_server_url = "https://ps.dropvoice.bytehome.fun"`
 - [ ] 手机：浏览器打开 `https://dropvoice.bytehome.fun`（PWA 可安装）
 - [ ] 配对：手机显示配对码 → 桌面确认配对成功（两台设备互见）
 - [ ] 发送：手机真实语音输入 → 桌面键盘注入成功

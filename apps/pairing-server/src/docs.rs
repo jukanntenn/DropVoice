@@ -28,8 +28,8 @@ use crate::store::device_repo::DeviceSummary;
     info(
         title = "DropVoice Pairing & Signaling Server API",
         version = env!("CARGO_PKG_VERSION"),
-        description = "公网 HTTPS 配对 + WebRTC 信令服务器。部署在 VPS 上，经 Cloudflare 回源到 \
-            Caddy:4443，再反向代理到 axum 127.0.0.1:38424。\n\n\
+        description = "公网 HTTPS 配对 + WebRTC 信令服务器。部署在 VPS 上，经 Cloudflare 回源 \
+            宿主共享 Caddy:443（终结 TLS），反代容器内 Caddy:8080，再到 axum 127.0.0.1:38424。\n\n\
             ## 职责边界\n\
             本服务只做**设备注册 + WebRTC 信令转发**，绝不中继文本数据。\n\
             手机扫码后发起 offer，服务器通过 SSE 转发给桌面，桌面回填 answer；\n\
@@ -47,7 +47,7 @@ use crate::store::device_repo::DeviceSummary;
         license(name = "MIT")
     ),
     servers(
-        (url = "https://ps.dropvoice.online", description = "生产环境（Cloudflare → Caddy:4443 → axum:38424）")
+        (url = "https://ps.dropvoice.online", description = "生产环境（Cloudflare → 宿主 Caddy:443 → 容器 Caddy:8080 → axum:38424）")
     ),
     tags(
         (name = "devices", description = "设备注册与状态上报"),

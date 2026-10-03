@@ -8,7 +8,7 @@ members = [
 # 中央依赖版本对齐（spec 11 §12.3 技术栈）。
 # 各成员 crate 通过 `dep.workspace = true` 继承，避免版本漂移。
 [workspace.package]
-version = "0.2.0"
+version = "0.1.0-rc.1"
 edition = "2021"
 # MSRV：与 CI stable（当前 1.93）对齐。clippy 自动读取此字段，无需在 clippy.toml
 # 重复声明 msrv。升级 sqlx 至 0.9 时需同步提升至 1.94+。

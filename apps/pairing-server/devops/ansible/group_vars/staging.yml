@@ -4,9 +4,9 @@
 #   dropvoice.bytehome.fun        = landing
 #   app.dropvoice.bytehome.fun    = PWA + /api
 #   ps.dropvoice.bytehome.fun     = 纯 API（桌面端）
-# 除"无 Cloudflare"外与生产零结构差异：TLS 由内网隧道在外部终结（运维侧，
-# 需泛域名 *.dropvoice.bytehome.fun 证书 + 泛解析）；Caddy 渲染 HTTP 形态。
-# 把本文件的域名/TLS/信任段三项改掉即可直接套在 Cloudflare 后面。
+# 与生产零结构差异：Caddyfile 恒为 HTTP 形态，TLS 由外部终结（本环境为内网
+# 隧道，生产为宿主共享 Caddy；运维侧，需泛域名 *.dropvoice.bytehome.fun 证书
+# + 泛解析）。生产部署值见 group_vars/production.yml。
 
 env: staging
 image_tag: main
@@ -24,7 +24,6 @@ public_url: "https://{{ landing_domain }}"
 # 宿主发布端口：与隧道现状对齐（内网隧道指向 fn:8888，运维事实，勿随意改动）。
 host_port: 8888
 caddy_port: 8080
-tls_profile: http
 
 # 上游可信代理段：内网隧道网关（真实客户端 IP 经其 XFF 传入；trusted_proxies
 # _strict 从右往左解析信任链）。TODO(ops)：确认网关 IP 后收窄为单个 /32——

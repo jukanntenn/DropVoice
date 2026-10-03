@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: DropVoice Pairing & Signaling Server API
   description: |-
-    公网 HTTPS 配对 + WebRTC 信令服务器。部署在 VPS 上，经 Cloudflare 回源到 Caddy:4443，再反向代理到 axum 127.0.0.1:38424。
+    公网 HTTPS 配对 + WebRTC 信令服务器。部署在 VPS 上，经 Cloudflare 回源 宿主共享 Caddy:443（终结 TLS），反代容器内 Caddy:8080，再到 axum 127.0.0.1:38424。
 
     ## 职责边界
     本服务只做**设备注册 + WebRTC 信令转发**，绝不中继文本数据。
@@ -21,10 +21,10 @@ info:
     name: DropVoice
   license:
     name: MIT
-  version: 0.2.0
+  version: 0.1.0-rc.1
 servers:
 - url: https://ps.dropvoice.online
-  description: 生产环境（Cloudflare → Caddy:4443 → axum:38424）
+  description: 生产环境（Cloudflare → 宿主 Caddy:443 → 容器 Caddy:8080 → axum:38424）
 paths:
   /api/devices:
     post:

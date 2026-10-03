@@ -1,17 +1,19 @@
 # {{ ansible_managed }}
-# dropvoice pairing-server Caddyfile — 单模板渲染 staging（HTTP 形态，TLS 由
-# 内网隧道终结）与 production（TLS 形态，Cloudflare Origin CA + Full strict）。
+# dropvoice pairing-server Caddyfile — 单一 HTTP 形态，TLS 恒由外部终结：
+#   staging    内网隧道（TLS 在隧道外终结）
+#   production ttyo 宿主共享 Caddy（Cloudflare 回源 :443，宿主 Caddy 反代到
+#              容器 127.0.0.1:{{ host_port }}；markpost 模式）
 # 三站点按 Host 分流，与生产域名一一映射：
 #   landing_domain  营销页（landing-dist）
 #   app_domain      手机 PWA（mobile-dist）+ /api 同源反代（PWA 与 API 恒同源）
 #   api_domain      纯 API（桌面心跳/SSE；跨域 CORS 已由 tauri origin 白名单覆盖）
-# 加 <port> 兜底块仅供容器 healthcheck（127.0.0.1 无 Host 匹配）。
+# 加 <port> 兜底块仅供容器 healthcheck（127.0.0.1 无 Host 匹配时命中）。
 #
-# 真实客户端 IP 链（B 方案）：servers.trusted_proxies（上游代理段）+
-# trusted_proxies_strict（从右往左信任链解析，官方对 CDN 链的推荐姿势）+
-# header_up X-Forwarded-For {client_ip}——axum 恒取 XFF 最左段即真实客户端
-# IP；未受信直连者的 XFF 被 Caddy 覆盖为其真实 IP（伪造免疫），且访问日志
-# 的 client_ip 字段自动有值。
+# 真实客户端 IP 链（B 方案）：servers.trusted_proxies（上游代理段，per-env 的
+# trusted_proxies_cidrs：staging=隧道网关，production=宿主 Caddy 经 docker 网桥）
+# + trusted_proxies_strict（从右往左信任链解析）+ header_up X-Forwarded-For
+# {client_ip}——axum 恒取 XFF 最左段即真实客户端 IP；未受信直连者的 XFF 被
+# Caddy 覆盖为其真实 IP（伪造免疫），且访问日志的 client_ip 字段自动有值。
 # 内部布局：Caddy {{ caddy_port }}（唯一发布端口），backend 127.0.0.1:{{ backend_port }}。
 {
 	auto_https off
@@ -21,19 +23,8 @@
 	}
 }
 
-{% if tls_profile == 'origin' %}
-{% set scheme = "https" %}
-{% else %}
-{% set scheme = "http" %}
-{% endif %}
-{% set addr_prefix = scheme ~ "://" %}
-
 # ── 站点 1：landing（营销页）───────────────────────────────────────────────
-{{ addr_prefix }}{{ landing_domain }}:{{ caddy_port }} {
-{% if tls_profile == 'origin' %}
-	tls /app/certs/origin.pem /app/certs/origin.key
-{% endif %}
-
+{{ landing_domain }}:{{ caddy_port }} {
 	header {
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
@@ -62,11 +53,7 @@
 }
 
 # ── 站点 2：app（手机 PWA + /api 同源）────────────────────────────────────
-{{ addr_prefix }}{{ app_domain }}:{{ caddy_port }} {
-{% if tls_profile == 'origin' %}
-	tls /app/certs/origin.pem /app/certs/origin.key
-{% endif %}
-
+{{ app_domain }}:{{ caddy_port }} {
 	header {
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
@@ -122,11 +109,7 @@
 }
 
 # ── 站点 3：ps（纯 API，桌面端）───────────────────────────────────────────
-{{ addr_prefix }}{{ api_domain }}:{{ caddy_port }} {
-{% if tls_profile == 'origin' %}
-	tls /app/certs/origin.pem /app/certs/origin.key
-{% endif %}
-
+{{ api_domain }}:{{ caddy_port }} {
 	header {
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
@@ -158,11 +141,7 @@
 }
 
 # ── 兜底块：容器 healthcheck（127.0.0.1 无 Host 匹配时命中此块）──────────
-{{ addr_prefix }}127.0.0.1:{{ caddy_port }} {
-{% if tls_profile == 'origin' %}
-	tls /app/certs/origin.pem /app/certs/origin.key
-{% endif %}
-
+127.0.0.1:{{ caddy_port }} {
 	handle /health {
 		reverse_proxy 127.0.0.1:{{ backend_port }}
 	}
