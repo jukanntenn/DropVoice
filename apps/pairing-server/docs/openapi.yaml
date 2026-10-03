@@ -21,7 +21,7 @@ info:
     name: DropVoice
   license:
     name: MIT
-  version: 0.1.0-rc.1
+  version: 0.1.0-rc.2
 servers:
 - url: https://ps.dropvoice.online
   description: 生产环境（Cloudflare → 宿主 Caddy:443 → 容器 Caddy:8080 → axum:38424）

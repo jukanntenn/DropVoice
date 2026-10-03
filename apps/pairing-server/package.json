@@ -1,7 +1,7 @@
 {
   "name": "@dropvoice/pairing-server",
   "private": true,
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "DropVoice pairing server (Rust). Pure Rust crate; this package.json only exists so pnpm workspace apps/* glob picks it up and the root scripts can invoke cargo uniformly.",
   "scripts": {
     "build": "cargo build --release --manifest-path Cargo.toml",

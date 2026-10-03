@@ -10,7 +10,7 @@ export const SITE = {
   releases: 'https://github.com/jukanntenn/DropVoice/releases/latest',
   /** 手机 PWA 入口（生产 app 域名：PWA 与 /api 同源；扫码/落地目标）。 */
   pwaUrl: 'https://app.dropvoice.online',
-  version: '0.1.0-rc.1',
+  version: '0.1.0-rc.2',
   license: 'MIT',
 } as const;
 
