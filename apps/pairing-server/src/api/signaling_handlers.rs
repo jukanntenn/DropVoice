@@ -363,7 +363,7 @@ pub struct EventsQuery {
     ticket: Option<String>,
 }
 
-/// 桌面 SSE 长连接：推送 incoming offer，每 15s 心跳。
+/// 桌面 SSE 长连接：推送 incoming offer，每 3s 心跳。
 /// 认证：query `ticket`（一次性，Bearer 换取；长效 token 不进 URL/日志）。
 #[utoipa::path(
     get,
@@ -374,7 +374,9 @@ pub struct EventsQuery {
     description = "桌面维持 1 条 SSE 长连接，接收手机的 incoming offer。\n\
         认证用 query 参数 `?ticket=`（由 `POST .../webrtc/subscribe` 以 Bearer 换取，\n\
         60s 单次使用——长效 pairing_token 不进 URL，避免进入访问日志）。\n\
-        每 15s 发具名 `ping` 事件（防 CF 125s 超时 + 连接活性监测）。\n\
+        每 3s 发具名 `ping` 事件，且建连瞬间即发首个 ping（企业代理链对\n\
+        \"已发响应头但 body 零字节\"的流按空闲掐断，生产实测 ~5s；首字节\n\
+        不能等第一个心跳周期）。\n\
         offer 事件 data 格式：`{session_id, credential, sdp}`。",
     params(
         ("device_id" = Uuid, Path, format = "uuid", description = "桌面自身设备 ID"),
@@ -419,7 +421,7 @@ pub async fn subscribe_events(
     let sub = state.signaling.subscribe_offers(device_id).await;
     let store = state.signaling.clone();
 
-    // 构建事件流：spawn 一个任务用 tokio::select! 合并 offer 推送 + 15s ping，
+    // 构建事件流：spawn 一个任务用 tokio::select! 合并 offer 推送 + 3s ping，
     // 写入 mpsc 通道；Sse 消费 ReceiverStream。
     // 当 SSE 连接断开，axum drop 响应 future → ReceiverStream drop → rx drop →
     // 任务 select 分支都返回 None/关闭 → 任务退出（释放并发计数）。
@@ -429,6 +431,13 @@ pub async fn subscribe_events(
         // 该订阅的唯一身份；退出时只 compare-and-delete 自己，绝不误删替换自己的新订阅（§7）。
         let sub_id = sub.sub_id;
         let mut ping = tokio::time::interval(SSE_PING_INTERVAL);
+        // 建连瞬间即发首个 ping：中间设备（企业代理链实测 ~5s）对"响应头已发
+        // 但 body 零字节"的流按空闲掐断——首字节不能等第一个周期。
+        if event_tx.send(Ok(ping_event())).await.is_err() {
+            store.unsubscribe_offers(device_id, sub_id).await;
+            sse_gauge.fetch_sub(1, Ordering::Relaxed);
+            return;
+        }
         ping.tick().await; // 消费立即触发的第一个 tick（interval 特性）
                            // 生命周期上限：中间层（内网穿透/CF）有连接时长上限（实测 openresty 300s），
                            // 超限被掐断时客户端可能不重连（实测）。240s 时优雅关闭 + retry 提示，
@@ -451,11 +460,7 @@ pub async fn subscribe_events(
                     }
                 }
                 _ = ping.tick() => {
-                    let ts = chrono::Utc::now().timestamp();
-                    let evt = Event::default()
-                        .event("ping")
-                        .data(serde_json::json!({"ts": ts}).to_string());
-                    if event_tx.send(Ok(evt)).await.is_err() {
+                    if event_tx.send(Ok(ping_event())).await.is_err() {
                         break;
                     }
                 }
@@ -486,10 +491,18 @@ pub async fn subscribe_events(
         [("x-accel-buffering", "no")],
         Sse::new(stream).keep_alive(
             KeepAlive::new()
-                .interval(Duration::from_secs(15))
+                .interval(SSE_PING_INTERVAL)
                 .text("keepalive"),
         ),
     ))
+}
+
+/// 构造具名 ping 事件（连接活性：客户端 chunk 级 45s 读超时 + 中间层空闲判定）。
+fn ping_event() -> Event {
+    let ts = chrono::Utc::now().timestamp();
+    Event::default()
+        .event("ping")
+        .data(serde_json::json!({"ts": ts}).to_string())
 }
 
 /// 构造 offer SSE 事件。

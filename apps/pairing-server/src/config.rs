@@ -44,8 +44,11 @@ pub const SIGNAL_SESSION_TTL: std::time::Duration = std::time::Duration::from_se
 /// 长轮询 hold 时长（§4.1：最多 30s，answer 就绪立即返回，无则 204 超时）。
 pub const LONG_POLL_HOLD: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// SSE 心跳周期（§4.6：每 15s 发具名 ping 事件，防 CF 125s Proxy Read Timeout）。
-pub const SSE_PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15);
+/// SSE 心跳周期（§4.6 spec 值 15s；实现取 3s——防 CF 125s Proxy Read Timeout
+/// 之外，还需活过企业代理链的滚动空闲掐断：生产实测桌面经代理出口时，流在
+/// 最后一个字节后 ~5s 被 cancel（详见 DV-RFC sse-keepalive-cadence）。3s 留
+/// 2s 余量；每桌面 ~15 B/s，代价可忽略）。
+pub const SSE_PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// SSE 连接最大生命周期（240s）。中间层（内网穿透 openresty 实测 300s、Cloudflare
 /// 125s）有连接时长上限，掐断后客户端可能不重连（实测）。服务端在此上限前
@@ -213,7 +216,7 @@ mod tests {
     fn time_constants_match_spec() {
         assert_eq!(SIGNAL_SESSION_TTL, std::time::Duration::from_secs(60));
         assert_eq!(LONG_POLL_HOLD, std::time::Duration::from_secs(30));
-        assert_eq!(SSE_PING_INTERVAL, std::time::Duration::from_secs(15));
+        assert_eq!(SSE_PING_INTERVAL, std::time::Duration::from_secs(3));
         assert_eq!(SSE_MAX_LIFETIME, std::time::Duration::from_secs(240));
         assert_eq!(MAX_SESSIONS_PER_DEVICE, 10);
         assert_eq!(SDP_MAX_BYTES, 64 * 1024);

@@ -272,7 +272,9 @@ paths:
         桌面维持 1 条 SSE 长连接，接收手机的 incoming offer。
         认证用 query 参数 `?ticket=`（由 `POST .../webrtc/subscribe` 以 Bearer 换取，
         60s 单次使用——长效 pairing_token 不进 URL，避免进入访问日志）。
-        每 15s 发具名 `ping` 事件（防 CF 125s 超时 + 连接活性监测）。
+        每 3s 发具名 `ping` 事件，且建连瞬间即发首个 ping（企业代理链对
+        "已发响应头但 body 零字节"的流按空闲掐断，生产实测 ~5s；首字节
+        不能等第一个心跳周期）。
         offer 事件 data 格式：`{session_id, credential, sdp}`。
       operationId: subscribeEvents
       parameters:
