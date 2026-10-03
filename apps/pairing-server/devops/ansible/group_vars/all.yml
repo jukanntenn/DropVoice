@@ -26,5 +26,13 @@ backend_port: 38424
 # SQLite, so the data volume plays the sibling's role with the same isolation.
 database_url: sqlite:///app/data/pairing.db?mode=rwc
 
+# Directory skeleton created by the playbook before compose comes up — log/ is
+# a bind mount, so it must exist before docker would implicitly create it as
+# root; every other state lives in the named volume.
+app_dirs:
+  - "{{ apps_path }}"
+  - "{{ app_path }}"
+  - "{{ app_path }}/log"
+
 # Rate limit (requests per IP per second) rendered into config.toml.
 rate_limit_per_sec: 1

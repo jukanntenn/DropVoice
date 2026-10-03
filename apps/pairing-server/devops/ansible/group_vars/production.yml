@@ -45,7 +45,3 @@ debug: false
 # CORS：webview 已是纯视图（信令全在 Rust 进程），手机 PWA 同源——生产形态
 # 无跨域需求，留空。
 cors_extra_origins: []
-
-app_dirs:
-  - "{{ apps_path }}"
-  - "{{ app_path }}"
