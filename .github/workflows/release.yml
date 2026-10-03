@@ -85,7 +85,11 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          tauriScript: pnpm tauri
+          # Monorepo: the tauri CLI lives in apps/desktop's devDependencies,
+          # so the action must run there — `pnpm tauri` at the repo root
+          # resolves to nothing.
+          projectPath: apps/desktop
+          tauriScript: pnpm
           args: ${{ matrix.args }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
