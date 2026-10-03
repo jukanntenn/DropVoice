@@ -24,7 +24,10 @@
 }
 
 # ── 站点 1：landing（营销页）───────────────────────────────────────────────
-{{ landing_domain }}:{{ caddy_port }} {
+# 注意：Caddy ≥2.10 起，无 scheme 的站点地址即使非标准端口也默认 HTTPS（旧版
+# 默认 HTTP 的破坏性变更），明文请求会被 400 "Client sent an HTTP request to
+# an HTTPS server" 拒绝——本文件恒为 HTTP 形态，所有站点必须显式 http:// 前缀。
+http://{{ landing_domain }}:{{ caddy_port }} {
 	header {
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
@@ -53,7 +56,7 @@
 }
 
 # ── 站点 2：app（手机 PWA + /api 同源）────────────────────────────────────
-{{ app_domain }}:{{ caddy_port }} {
+http://{{ app_domain }}:{{ caddy_port }} {
 	header {
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
@@ -109,7 +112,7 @@
 }
 
 # ── 站点 3：ps（纯 API，桌面端）───────────────────────────────────────────
-{{ api_domain }}:{{ caddy_port }} {
+http://{{ api_domain }}:{{ caddy_port }} {
 	header {
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
@@ -141,7 +144,7 @@
 }
 
 # ── 兜底块：容器 healthcheck（127.0.0.1 无 Host 匹配时命中此块）──────────
-127.0.0.1:{{ caddy_port }} {
+http://127.0.0.1:{{ caddy_port }} {
 	handle /health {
 		reverse_proxy 127.0.0.1:{{ backend_port }}
 	}
