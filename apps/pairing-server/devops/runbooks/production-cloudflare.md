@@ -6,7 +6,7 @@
 
 - 生产源站：ttyo（alice @ 43.133.160.29；inventory 见 `hosts.yml` + `host_vars/ttyo.yml`）
 - 流量链（markpost 模式，与该机既有服务一致）：Cloudflare 回源 `ttyo:443` → 宿主共享 Caddy 终结 TLS（Origin CA 证书）→ 按主机名反代容器**仅回环**发布的 `127.0.0.1:8089` → 容器内 Caddy（HTTP `:8080`）三站点分流 → axum（`127.0.0.1:38424`）
-- 部署目录（alice）：`/home/alice/docker/dropvoice-pairing/`（log/；容器恒 HTTP，无 certs 目录）
+- 部署目录（alice）：`/home/alice/docker/dropvoice/`（data/ + log/；容器恒 HTTP，无 certs 目录）
 - 无 Origin Rule 端口改写、无容器内证书：回源就是标准 443，与其他服务零差别
 
 ## 1. zone 迁移（DNS → Cloudflare）

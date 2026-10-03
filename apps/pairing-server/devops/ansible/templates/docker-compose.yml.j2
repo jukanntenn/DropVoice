@@ -2,10 +2,11 @@
 # dropvoice pairing-server docker-compose (rendered for {{ env }}).
 #
 # Topology is identical across staging / production: a single container
-# (s6-overlay supervising Caddy + the Rust axum backend) with the SQLite
-# database in the dropvoice-data named volume at /app/data — never published on
-# the host (markpost's sibling-postgres-over-Unix-socket mechanism, adapted for
-# embedded SQLite). Caddy serves plain HTTP in every environment — TLS is
+# (s6-overlay supervising Caddy + the Rust axum backend). The SQLite database
+# is bind-mounted from the deployment dir's data/ subdirectory (not a named
+# volume), so the whole deployment — compose, config, data, log — is one plain
+# directory tree and backup is a single tar (stop the container first for a
+# consistent snapshot). Caddy serves plain HTTP in every environment — TLS is
 # terminated upstream (staging: intranet tunnel; production: the shared host
 # Caddy that Cloudflare reaches on :443, reverse-proxying to this container's
 # loopback-only published port). The only per-environment difference is the
@@ -17,7 +18,7 @@
 # config.toml by the playbook and mounted at /app/config.toml; this compose
 # keeps only RUST_LOG / LOG_DIR as environment (runtime concerns).
 services:
-  dropvoice-pairing:
+  {{ app_name }}:
     image: {{ image }}
     container_name: {{ app_name }}
     ports:
@@ -26,7 +27,7 @@ services:
       - {{ caddyfile }}:/etc/caddy/Caddyfile:ro
       - {{ config_file }}:/app/config.toml:ro
       - {{ app_path }}/log:/app/log
-      - dropvoice-data:/app/data
+      - {{ app_path }}/data:/app/data
     environment:
       - LOG_DIR=/app/log
       - RUST_LOG={{ 'info,dropvoice_pairing_server=debug' if debug else 'info' }}
@@ -46,5 +47,3 @@ services:
         max-size: "10m"
         max-file: "3"
     restart: always
-volumes:
-  dropvoice-data:

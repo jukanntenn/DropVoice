@@ -5,7 +5,7 @@
 # These render into config.toml (template config.toml.j2 → /app/config.toml),
 # docker-compose.yml and the Caddyfile on the target host.
 
-app_name: dropvoice-pairing
+app_name: dropvoice
 apps_path: "{{ home }}/docker"
 app_path: "{{ apps_path }}/{{ app_name }}"
 compose_file: "{{ app_path }}/docker-compose.yml"
@@ -20,18 +20,20 @@ config_file: "{{ app_path }}/config.toml"
 #     production: the shared host Caddy on ttyo (Cloudflare reaches it on :443).
 backend_port: 38424
 
-# SQLite database file lives at /app/data/pairing.db in the app container
-# (dropvoice-data named volume), never published on the host. markpost runs a
-# sibling postgres over a shared Unix-socket volume; this project uses embedded
-# SQLite, so the data volume plays the sibling's role with the same isolation.
+# SQLite database file lives at /app/data/pairing.db in the app container,
+# bind-mounted from the deployment dir's data/ subdirectory (not a named
+# volume): compose + config + data + log form one plain directory tree, so
+# backup is a single tar of the app dir (stop the container first for a
+# consistent sqlite snapshot).
 database_url: sqlite:///app/data/pairing.db?mode=rwc
 
-# Directory skeleton created by the playbook before compose comes up — log/ is
-# a bind mount, so it must exist before docker would implicitly create it as
-# root; every other state lives in the named volume.
+# Directory skeleton created by the playbook before compose comes up — data/
+# and log/ are bind mounts, so they must exist instead of being implicitly
+# created root-owned by dockerd.
 app_dirs:
   - "{{ apps_path }}"
   - "{{ app_path }}"
+  - "{{ app_path }}/data"
   - "{{ app_path }}/log"
 
 # Rate limit (requests per IP per second) rendered into config.toml.

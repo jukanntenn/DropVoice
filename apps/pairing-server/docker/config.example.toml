@@ -9,7 +9,7 @@
 # axum 监听地址（容器内固定：仅回环，由 Caddy 反代；勿改）
 listen_addr = "127.0.0.1:38424"
 
-# SQLite（dropvoice-data 命名卷，容器外不可见；勿改）
+# SQLite（容器内路径恒为 /app/data：本地验收栈在命名卷，服务器部署 bind mount 宿主 data/；勿改）
 database_url = "sqlite:///app/data/pairing.db?mode=rwc"
 
 # 速率限制（每 IP 每秒请求数；默认 1）
