@@ -112,3 +112,33 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ github.ref_name }}" --draft=false
+
+  publish-r2:
+    # Desktop updater distribution (releases.dropvoice.online, Cloudflare R2):
+    # rewrite tauri-action's latest.json platform URLs to the R2 domain and
+    # upload the signed artifacts + manifest. Stable tags only — prereleases
+    # never move the manifest shipped installers poll (same rule as the docker
+    # `latest` tag in docker-publish.yml). Requires secret
+    # CLOUDFLARE_API_TOKEN (Account -> R2 -> Edit).
+    needs: [build, publish]
+    if: ${{ startsWith(github.ref_name, 'v') && !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "$GITHUB_REF_NAME" --dir dist --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish updater artifacts to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: >-
+          python scripts/publish_updater_manifest.py
+          --release-dir dist --tag "$GITHUB_REF_NAME"
+          --base-url https://releases.dropvoice.online
