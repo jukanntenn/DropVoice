@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/implemented/bug-fix/2026-10-05-worktree-hook-takeover-validation.md
+2026-10-05-worktree-hook-takeover-validation.md: ce417c06227b1f12beca3eef5c98ad9a4de0e51e
+2026-10-05-worktree-hook-takeover-validation.zh.md: 5e70491320f1b7dbb5784534d5eee295eaa212b5

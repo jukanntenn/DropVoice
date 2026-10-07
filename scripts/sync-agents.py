@@ -37,7 +37,6 @@ PAIRS = [
     ("apps/landing/AGENTS.md", "apps/landing/CLAUDE.md"),
     ("packages/AGENTS.md", "packages/CLAUDE.md"),
     ("docs/AGENTS.md", "docs/CLAUDE.md"),
-    (".agents/dv-rfcs/AGENTS.md", ".agents/dv-rfcs/CLAUDE.md"),
 ]
 
 SKILLS_SOURCE = ".agents/skills"

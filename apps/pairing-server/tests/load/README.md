@@ -1,9 +1,11 @@
-# 压力测试（spec 11 §13.3）
+# Load testing (spec 11 §13.3)
 
-k6 压测脚本，验证配对服务器容量目标（spec 11 §10.4）：
-100 万设备、峰值 1014 QPS。
+English | [中文](README.zh.md)
 
-## 运行
+k6 load-test scripts validating the pairing server's capacity targets (spec 11 §10.4):
+1,000,000 devices, 1014 QPS peak.
+
+## Running
 
 ```bash
 # 1. 启动本地同构测试环境（Caddy + axum，HTTP）
@@ -19,7 +21,7 @@ k6 run tests/load/register.js \
   --vus 200 --duration 2m
 ```
 
-## 脚本
+## Scripts
 
 | 脚本 | 场景 | 说明 |
 |------|------|------|
@@ -28,12 +30,12 @@ k6 run tests/load/register.js \
 后续可扩展：`heartbeat.js`（PUT /status 稳态）、`pairing_code.js`（读写混合）、
 `sqlite_contention.js`（并发写入锁竞争）。
 
-## 阈值（spec 11 §13.3）
+## Thresholds (spec 11 §13.3)
 
 - P95 延迟 < 100 ms
 - 错误率 < 1%
 - CPU < 80%（需结合 docker stats 观察）
 
-## 合并门槛
+## Merge gate
 
 配对服务器 PR 必须附带压测脚本 + 容量验证报告（spec 11 §13.3）。

@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/implemented/architecture/2026-08-14-webrtc-datachannel-public-pairing-server.md
+2026-08-14-webrtc-datachannel-public-pairing-server.md: 6d8b6cd5ea920db99dbbf07b259f48163f08092b
+2026-08-14-webrtc-datachannel-public-pairing-server.zh.md: dcc1eccc8b8a18fc2334cf0f31941fea43fa86e1

@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/proposed/architecture/2026-10-03-desktop-updater-r2-edge-distribution.md
+2026-10-03-desktop-updater-r2-edge-distribution.md: 15c1cea30efb7797f1f4c0a1b82daefb89d54dba
+2026-10-03-desktop-updater-r2-edge-distribution.zh.md: 5109dc9890846d29e2879685d0e449dd4b5b65d8

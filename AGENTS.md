@@ -20,11 +20,15 @@ pnpm (>=11) + Cargo workspaces, run from the repo root. The zero-config entry is
 - `pnpm dev:tauri` / `pnpm dev:mobile` / `pnpm dev:landing` — dev servers (export `PAIRING_SERVER_URL` / `VITE_API_PROXY_TARGET` per docs/development.md).
 - `pnpm build:tauri` — production desktop installer (MSI/NSIS/dmg/deb).
 
+<a id="run-relevant-checks-locally"></a>
+
+Select the narrowest checks that cover the changed surface — focused suites owning the behavior, `hdsh pairing verify` for documentation pairs, `hdsh rfc verify` for decision records — and leave exhaustive rehearsal to CI; [pushing](.agents/skills/pushing/SKILL.md) owns the selection procedure.
+
 ## Quality gate
 
-**prek is the single source of format, lint, and test gating** — workspace mode, root `prek.toml` plus one per project. AI post-edit hooks run `prek run --group format --files <edited>`; AI Stop hooks run `prek run --group lint --all-files`; commit → pre-commit stage; push → pre-push stage; CI → both (`pnpm quality`). Groups: `format` (fixers), `lint` (read-only), `check` (structure, drift, tests). Never `--no-verify`; never bypass a gate. Details: [docs/development.md](docs/development.md#quality-gate-prek-single-source-of-truth).
+**prek is the single source of format, lint, and test gating** — workspace mode, root `prek.toml` plus one per project. AI post-edit hooks run `prek run --group format --files <edited>`; AI Stop hooks run `prek run --group lint --all-files`; commit → pre-commit stage; push → pre-push stage; CI → both (`pnpm quality`). Groups: `format` (fixers), `lint` (read-only), `check` (structure, drift, tests), `hdsh` (adopted governance gates). Never `--no-verify`; never bypass a gate. Details: [docs/development.md](docs/development.md#quality-gate-prek--single-source-of-truth).
 
-Generated/lock files are exempt from every fixer and guarded by drift gates instead: `design-sync`, `openapi-drift`, `lockfiles-fresh`, `agents-sync`, and `doc-check` (`pnpm docs:check` — dv-rfcs format, doc pairs, budgets, links).
+Generated/lock files are exempt from every fixer and guarded by drift gates instead: `design-sync`, `openapi-drift`, `lockfiles-fresh`, `agents-sync`, and the `hdsh` group (pairing records, RFC format and archive, docs wrap/links/budgets, adopt drift — installed by `hdsh adopt`, verified with `hdsh adopt verify`).
 
 ## Code style
 
@@ -47,7 +51,7 @@ Generated/lock files are exempt from every fixer and guarded by drift gates inst
 4. Agent instruction files — `AGENTS.md` is the source at every level; each `CLAUDE.md` is a byte-identical copy; `.claude/skills/` mirrors `.agents/skills/`. Rebuild all mirrors with `python scripts/sync_agent_files.py`; the `agents-sync` gate rejects drift.
 5. Secrets — never commit. App config goes in TOML files (local configs gitignored, `*.example.toml` templates committed); env vars are escape hatches. CI image publishing needs `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` repo secrets.
 
-## Key conventions
+## Conventions
 
 - Workspace dependency inheritance: shared versions are declared at the workspace root; members inherit via `workspace = true` (Cargo) / `workspace:*` (pnpm). Never pin inline what the root declares.
 - Configuration: every knob has exactly one source of truth — the [single-source table](docs/architecture.md#configuration-single-sources).
@@ -57,10 +61,10 @@ Generated/lock files are exempt from every fixer and guarded by drift gates inst
 
 ## Documentation & decision records
 
-Documentation follows [docs/AGENTS.md](docs/AGENTS.md): one fact, one home; current state, not change history; bilingual pairs for prose pages ([development](docs/development.md), [architecture](docs/architecture.md)); English for agent instructions; word budgets for `AGENTS.md` files; links must resolve.
+Documentation follows [docs/AGENTS.md](docs/AGENTS.md): one fact, one home; current state, not change history; in-scope prose ships as bilingual pairs under the [pairing contract](docs/i18n/README.md) (`hdsh pairing verify`); English for agent instructions; word ceilings in `.hdsh/docs.manifest.json`; links must resolve.
 
-Decision rationale lives in [DV-RFCs](.agents/dv-rfcs/README.md) (`.agents/dv-rfcs/`): every non-trivial change adds or updates a record in the same change — the why, the alternatives that lost, the consequences. Only purely mechanical edits with no change to behavior, contracts, structure, process, or rationale are exempt.
+Decision rationale lives in [RFCs](.agents/rfcs/README.md) (`.agents/rfcs/`): every non-trivial change adds or updates a record in the same change — the why, the alternatives that lost, the consequences. Only purely mechanical edits with no change to behavior, contracts, structure, process, or rationale are exempt.
 
 ## Editing these instructions
 
-Root and subtree `AGENTS.md` files are standing orders; subtree files supplement this one and never repeat it. Keep each rule 1–3 lines, linking its home instead of restating it. Word ceilings live in `scripts/doc_budgets.manifest.json`; on red: relocate to the owning tier, condense, raise the ceiling last with a justified diff. After editing any `AGENTS.md`, `CLAUDE.md`, or skill, run `python scripts/sync_agent_files.py`.
+Root and subtree `AGENTS.md` files are standing orders; subtree files supplement this one and never repeat it. Keep each rule 1–3 lines, linking its home instead of restating it. Word ceilings live in `.hdsh/docs.manifest.json`; on red: relocate to the owning tier, condense, raise the ceiling last with a justified diff. After editing any `AGENTS.md`, `CLAUDE.md`, or skill, run `python scripts/sync_agent_files.py`.

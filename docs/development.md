@@ -1,5 +1,7 @@
 # Development
 
+English | [中文](development.zh.md)
+
 Procedures: everyday commands, quality gates, migrations, deployment, and release. Current-state system facts live in [architecture.md](architecture.md); rules live in the [root `AGENTS.md`](../AGENTS.md) and [docs/AGENTS.md](AGENTS.md).
 
 All commands run from the repo root unless noted. The project uses **pnpm** (>=11) and **Cargo workspaces**.
@@ -28,7 +30,7 @@ prek install            # once per clone: pre-commit + pre-push + commit-msg hoo
 prek run --all-files    # format + lint + gates (pre-commit stage)
 prek run --stage pre-push --all-files   # tests (pre-push stage)
 pnpm quality            # alias for both of the above
-pnpm docs:check         # documentation gates (dv-rfcs format, doc pairs, budgets, links)
+hdsh adopt verify       # adoption drift: installed files, placeholders, CI wiring
 pnpm test:e2e           # Playwright e2e (root e2e/ dir; also a CI job)
 ```
 
@@ -37,10 +39,11 @@ Hook **groups** (orthogonal to stages):
 - `format` — mutating fixers with auto-fix on (prettier --write, oxlint --fix, cargo fmt, builtin whitespace/EOF fixers)
 - `lint` — read-only gates (oxlint, tsc --noEmit, cargo clippy -D warnings)
 - `check` — structural checks, generated-file drift, lockfile freshness (pre-commit stage); vitest + cargo test (pre-push stage)
+- `hdsh` — adopted governance gates from the [hdsh harness](https://github.com/jukanntenn/harness-deepseek-harness) (pinned in the managed prek block): `hdsh-pairing-verify`, `hdsh-rfc-verify`, `hdsh-rfc-archive`, `hdsh-docs-wrap`, `hdsh-docs-links`, `hdsh-docs-budgets`, `hdsh-adopt-verify`
 
 Invocation map: AI post-edit hooks run `prek run --group format --files <edited>`; AI Stop hooks run `prek run --group lint --all-files`; commit → pre-commit stage; push → pre-push stage; CI → both `prek run --all-files` and `prek run --stage pre-push --all-files` (`.github/workflows/quality.yml`), plus a Windows/macOS desktop-Rust matrix for platform-specific coverage and a Playwright e2e job.
 
-Generated/lock files are exempt from every fixer and guarded by drift gates instead: `packages/ui/src/tokens/theme.css` (`design-sync`, fix: `pnpm design:sync`), `apps/pairing-server/docs/openapi.{json,yaml}` (`openapi-drift`, fix: `gen-openapi`), `pnpm-lock.yaml`/`Cargo.lock` (`lockfiles-fresh`, fix: `pnpm install --lockfile-only` + any cargo command), `AGENTS.md`/`CLAUDE.md` pairs and the skills mirror (`agents-sync`, fix: `python scripts/sync_agent_files.py`), Markdown content (`doc-check` → `python scripts/doc_sync.py`).
+Generated/lock files are exempt from every fixer and guarded by drift gates instead: `packages/ui/src/tokens/theme.css` (`design-sync`, fix: `pnpm design:sync`), `apps/pairing-server/docs/openapi.{json,yaml}` (`openapi-drift`, fix: `gen-openapi`), `pnpm-lock.yaml`/`Cargo.lock` (`lockfiles-fresh`, fix: `pnpm install --lockfile-only` + any cargo command), `AGENTS.md`/`CLAUDE.md` pairs and the skills mirror (`agents-sync`, fix: `python scripts/sync_agent_files.py`), documentation corpus (`hdsh` group — pairing records, RFC format, wrap/links/budgets; fix the doc, then `hdsh pairing record <pair>`; installed hdsh files are upstream-owned, regenerate via `hdsh adopt apply`).
 
 ## AI tool hooks (thin prek wrappers)
 
@@ -203,15 +206,10 @@ pnpm version:major
 # docker-publish.yml publishes the pairing-server image (ghcr.io).
 ```
 
-An exact prerelease (e.g. `v0.1.0-rc.1`) is cut by hand: set the root version,
-run `pnpm version:sync` (syncs every version field, including all package.json
-files), commit, then `git tag v0.1.0-rc.1` — `pnpm version:pre:*` only
-increments from the current version.
+An exact prerelease (e.g. `v0.1.0-rc.1`) is cut by hand: set the root version, run `pnpm version:sync` (syncs every version field, including all package.json files), commit, then `git tag v0.1.0-rc.1` — `pnpm version:pre:*` only increments from the current version.
 
-Desktop updater distribution rides the same stable tag: the `publish-r2` job in `release.yml` uploads the signed updater artifacts to Cloudflare R2 (`releases.dropvoice.online`) and moves `update/manifest.json`; prerelease tags never do. One-time prerequisites (R2 bucket + custom domain, `CLOUDFLARE_API_TOKEN` and `TAURI_SIGNING_PRIVATE_KEY` secrets): [production Cloudflare runbook](../apps/pairing-server/devops/runbooks/production-cloudflare.md). Rationale: [DV-RFC](../.agents/dv-rfcs/proposed/2026-10-03-desktop-updater-r2-edge-distribution.md).
-Before the first stable, the update chain is rehearsed by hand: install `rc.1`, cut `rc.2`,
-download its release assets and run `scripts/publish_updater_manifest.py --tag v0.1.0-rc.2
---allow-prerelease` (with `CLOUDFLARE_API_TOKEN` exported), then watch the rc.1 client update;
-once a stable install base exists, the manifest moves only via CI's stable-tag gate.
+Desktop updater distribution rides the same stable tag: the `publish-r2` job in `release.yml` uploads the signed updater artifacts to Cloudflare R2 (`releases.dropvoice.online`) and moves `update/manifest.json`; prerelease tags never do. One-time prerequisites (R2 bucket + custom domain, `CLOUDFLARE_API_TOKEN` and `TAURI_SIGNING_PRIVATE_KEY` secrets): [production Cloudflare runbook](../apps/pairing-server/devops/runbooks/production-cloudflare.md). Rationale: [RFC](../.agents/rfcs/proposed/architecture/2026-10-03-desktop-updater-r2-edge-distribution.md).
+
+Before the first stable, the update chain is rehearsed by hand: install `rc.1`, cut `rc.2`, download its release assets and run `scripts/publish_updater_manifest.py --tag v0.1.0-rc.2 --allow-prerelease` (with `CLOUDFLARE_API_TOKEN` exported), then watch the rc.1 client update; once a stable install base exists, the manifest moves only via CI's stable-tag gate.
 
 Commits follow Conventional Commits (commitlint-enforced); scopes: `(desktop)`, `(mobile)`, `(pairing-server)`, `(core)`, `(ui)`, `(i18n)`, `(ci)`, `(docs)`.

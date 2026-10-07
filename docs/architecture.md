@@ -1,6 +1,8 @@
 # Architecture
 
-Current-state facts about how DropVoice is composed. Decision rationale lives in the [DV-RFCs](../.agents/dv-rfcs/README.md); procedures live in [development.md](development.md); per-subtree orders live in each `AGENTS.md`.
+English | [中文](architecture.zh.md)
+
+Current-state facts about how DropVoice is composed. Decision rationale lives in the [RFCs](../.agents/rfcs/README.md); procedures live in [development.md](development.md); per-subtree orders live in each `AGENTS.md`.
 
 ## Composition
 

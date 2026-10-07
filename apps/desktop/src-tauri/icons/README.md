@@ -1,5 +1,7 @@
 # DropVoice Icons
 
+English | [中文](README.zh.md)
+
 This directory should contain application icons in various sizes:
 - 32x32.png
 - 128x128.png

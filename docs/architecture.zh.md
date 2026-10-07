@@ -1,6 +1,8 @@
 # 架构
 
-DropVoice 组成方式的现状事实。决策理由在 [DV-RFCs](../.agents/dv-rfcs/README.md)；操作步骤在 [development.md](development.zh.md)；各子树指令在各自的 `AGENTS.md`。
+[English](architecture.md) | 中文
+
+DropVoice 组成方式的现状事实。决策理由在 [RFCs](../.agents/rfcs/README.zh.md)；操作步骤在 [development.md](development.zh.md)；各子树指令在各自的 `AGENTS.md`。
 
 ## 组成
 

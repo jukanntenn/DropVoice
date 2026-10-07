@@ -1,5 +1,7 @@
 # DropVoice
 
+English | [中文](README.zh.md)
+
 Send voice-to-text input from your mobile phone to your PC via LAN.
 
 ## Quick Start
@@ -74,7 +76,7 @@ See [specs/full/01-configuration.md](specs/full/01-configuration.md) for the ful
 ## Documentation
 
 - [Configuration spec](specs/full/01-configuration.md) — the configuration mechanism
-- [Architecture](docs/architecture.md) / [开发文档](docs/development.zh.md) — how the system fits together, and how to work on it
+- [Architecture](docs/architecture.md) / [开发](docs/development.md) — how the system fits together, and how to work on it
 - [Design System](DESIGN.md) — Visual language and design tokens
 - [Changelog](CHANGELOG.md) — Version history
 
