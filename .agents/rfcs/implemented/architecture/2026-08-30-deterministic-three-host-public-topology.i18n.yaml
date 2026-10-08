@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/implemented/architecture/2026-08-30-deterministic-three-host-public-topology.md
+2026-08-30-deterministic-three-host-public-topology.md: dd5fb81981eba7d719bbd20cdbf5211a75d72f4f
+2026-08-30-deterministic-three-host-public-topology.zh.md: 968d91a67e9e47fb45cbbd78043bec25fb37184f

@@ -3,3 +3,9 @@
 # does not turn them CRLF and permanently fail the drift gate.
 apps/pairing-server/docs/openapi.json text eol=lf
 apps/pairing-server/docs/openapi.yaml text eol=lf
+*.i18n.yaml merge=hdsh-pairing
+
+# Pairing records and the bilingual corpus hash exact bytes (hdsh pairing);
+# Windows autocrlf checkouts would flip endings under the records. Pin LF.
+*.md text eol=lf
+*.i18n.yaml text eol=lf

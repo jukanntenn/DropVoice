@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/proposed/bug-fix/2026-10-03-sse-keepalive-cadence-for-proxy-middleboxes.md
+2026-10-03-sse-keepalive-cadence-for-proxy-middleboxes.md: 3160fe7cbf764eb33b4ce13400685f7e9f1320d4
+2026-10-03-sse-keepalive-cadence-for-proxy-middleboxes.zh.md: 3019bece3d8e26b5226a958e96a553cead98042d

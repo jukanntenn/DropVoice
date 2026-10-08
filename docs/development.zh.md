@@ -1,5 +1,7 @@
 # 开发
 
+[English](development.md) | 中文
+
 操作步骤：日常命令、质量门控、数据库迁移、部署与发布。系统现状事实在 [architecture.md](architecture.zh.md)；规则在[根 `AGENTS.md`](../AGENTS.md) 与 [docs/AGENTS.md](AGENTS.md)。
 
 除特别说明外，所有命令都在仓库根执行。项目使用 **pnpm**（>=11）与 **Cargo workspaces**。
@@ -28,7 +30,7 @@ prek install            # once per clone: pre-commit + pre-push + commit-msg hoo
 prek run --all-files    # format + lint + gates (pre-commit stage)
 prek run --stage pre-push --all-files   # tests (pre-push stage)
 pnpm quality            # alias for both of the above
-pnpm docs:check         # documentation gates (dv-rfcs format, doc pairs, budgets, links)
+hdsh adopt verify       # adoption drift: installed files, placeholders, CI wiring
 pnpm test:e2e           # Playwright e2e (root e2e/ dir; also a CI job)
 ```
 
@@ -37,10 +39,11 @@ Hook **组**（与 stage 正交）：
 - `format`——自动修复的改写型 fixer（prettier --write、oxlint --fix、cargo fmt、内建空白/EOF 修复器）
 - `lint`——只读门控（oxlint、tsc --noEmit、cargo clippy -D warnings）
 - `check`——结构性检查、生成物漂移、lockfile 新鲜度（pre-commit stage）；vitest + cargo test（pre-push stage）
+- `hdsh`——从 [hdsh harness](https://github.com/jukanntenn/harness-deepseek-harness) 接入的治理门（pin 在 prek 托管块）：`hdsh-pairing-verify`、`hdsh-rfc-verify`、`hdsh-rfc-archive`、`hdsh-docs-wrap`、`hdsh-docs-links`、`hdsh-docs-budgets`、`hdsh-adopt-verify`
 
 调用映射：AI post-edit 钩子跑 `prek run --group format --files <edited>`；AI Stop 钩子跑 `prek run --group lint --all-files`；commit → pre-commit stage；push → pre-push stage；CI → `prek run --all-files` 与 `prek run --stage pre-push --all-files` 两者（`.github/workflows/quality.yml`），另有 Windows/macOS desktop-Rust 平台矩阵与 Playwright e2e job。
 
-生成物/锁文件豁免于所有 fixer，改由漂移门控守护：`packages/ui/src/tokens/theme.css`（`design-sync`，修复：`pnpm design:sync`）、`apps/pairing-server/docs/openapi.{json,yaml}`（`openapi-drift`，修复：`gen-openapi`）、`pnpm-lock.yaml`/`Cargo.lock`（`lockfiles-fresh`，修复：`pnpm install --lockfile-only` + 任意 cargo 命令）、`AGENTS.md`/`CLAUDE.md` 各对与 skills 镜像（`agents-sync`，修复：`python scripts/sync_agent_files.py`）、Markdown 内容（`doc-check` → `python scripts/doc_sync.py`）。
+生成物/锁文件豁免于所有 fixer，改由漂移门控守护：`packages/ui/src/tokens/theme.css`（`design-sync`，修复：`pnpm design:sync`）、`apps/pairing-server/docs/openapi.{json,yaml}`（`openapi-drift`，修复：`gen-openapi`）、`pnpm-lock.yaml`/`Cargo.lock`（`lockfiles-fresh`，修复：`pnpm install --lockfile-only` + 任意 cargo 命令）、`AGENTS.md`/`CLAUDE.md` 各对与 skills 镜像（`agents-sync`，修复：`python scripts/sync_agent_files.py`）、文档语料（`hdsh` 组——配对记录、RFC 格式、wrap/links/预算；修文档后执行 `hdsh pairing record <pair>`；hdsh 安装文件归上游所有，经 `hdsh adopt apply` 再生成）。
 
 ## AI 工具钩子（prek 的薄包装）
 
@@ -203,14 +206,10 @@ pnpm version:major
 # docker-publish.yml publishes the pairing-server image (ghcr.io).
 ```
 
-精确预发布版本（如 `v0.1.0-rc.1`）手工裁切：改根版本后跑 `pnpm version:sync`
-（同步所有版本字段，含各 package.json），提交后 `git tag v0.1.0-rc.1`——
-`pnpm version:pre:*` 只会从当前版本递增。
+精确预发布版本（如 `v0.1.0-rc.1`）手工裁切：改根版本后跑 `pnpm version:sync`（同步所有版本字段，含各 package.json），提交后 `git tag v0.1.0-rc.1`——`pnpm version:pre:*` 只会从当前版本递增。
 
-桌面自动更新分发随同一个稳定版 tag 完成：`release.yml` 的 `publish-r2` job 把签名更新制品上传到 Cloudflare R2（`releases.dropvoice.online`）并移动 `update/manifest.json`；预发布 tag 永不移动。一次性前置（R2 bucket + 自定义域、`CLOUDFLARE_API_TOKEN` 与 `TAURI_SIGNING_PRIVATE_KEY` secrets）：[生产 Cloudflare runbook](../apps/pairing-server/devops/runbooks/production-cloudflare.md)。决策依据：[DV-RFC](../.agents/dv-rfcs/proposed/2026-10-03-desktop-updater-r2-edge-distribution.md)。
-首个稳定版发布前，更新链路靠手工彩排：安装 `rc.1` → 裁切 `rc.2` → 下载其 release 资产并执行
-`scripts/publish_updater_manifest.py --tag v0.1.0-rc.2 --allow-prerelease`（export
-`CLOUDFLARE_API_TOKEN`），观察 rc.1 客户端完成更新；一旦存在稳定版装机量，manifest 只经
-CI 的稳定版门移动。
+桌面自动更新分发随同一个稳定版 tag 完成：`release.yml` 的 `publish-r2` job 把签名更新制品上传到 Cloudflare R2（`releases.dropvoice.online`）并移动 `update/manifest.json`；预发布 tag 永不移动。一次性前置（R2 bucket + 自定义域、`CLOUDFLARE_API_TOKEN` 与 `TAURI_SIGNING_PRIVATE_KEY` secrets）：[生产 Cloudflare runbook](../apps/pairing-server/devops/runbooks/production-cloudflare.md)。决策依据：[RFC](../.agents/rfcs/proposed/architecture/2026-10-03-desktop-updater-r2-edge-distribution.zh.md)。
+
+首个稳定版发布前，更新链路靠手工彩排：安装 `rc.1` → 裁切 `rc.2` → 下载其 release 资产并执行 `scripts/publish_updater_manifest.py --tag v0.1.0-rc.2 --allow-prerelease`（export `CLOUDFLARE_API_TOKEN`），观察 rc.1 客户端完成更新；一旦存在稳定版装机量，manifest 只经 CI 的稳定版门移动。
 
 提交遵循 Conventional Commits（commitlint 强制）；scope：`(desktop)`、`(mobile)`、`(pairing-server)`、`(core)`、`(ui)`、`(i18n)`、`(ci)`、`(docs)`。

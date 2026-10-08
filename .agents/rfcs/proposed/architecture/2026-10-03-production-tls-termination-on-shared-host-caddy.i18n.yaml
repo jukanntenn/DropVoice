@@ -1,0 +1,7 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob
+# hash of each side as of the last confirmed-consistent state. Both
+# languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   hdsh pairing record .agents/rfcs/proposed/architecture/2026-10-03-production-tls-termination-on-shared-host-caddy.md
+2026-10-03-production-tls-termination-on-shared-host-caddy.md: eb5907a4f7b94c3f152138047144e145a1a78c7c
+2026-10-03-production-tls-termination-on-shared-host-caddy.zh.md: a5a6f69189417b56ed72f71ac0578e305ac4486b

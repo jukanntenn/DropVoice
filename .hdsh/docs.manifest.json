@@ -1,0 +1,15 @@
+{
+  "docBudgets": {
+    "AGENTS.md": 1000,
+    "docs/AGENTS.md": 1100,
+    "apps/desktop/AGENTS.md": 500,
+    "apps/mobile/AGENTS.md": 300,
+    "apps/pairing-server/AGENTS.md": 450,
+    "apps/landing/AGENTS.md": 150,
+    "packages/AGENTS.md": 250,
+    "docs/architecture.md": 1350,
+    "docs/architecture.zh.md": 870,
+    "docs/development.md": 1940,
+    "docs/development.zh.md": 1230
+  }
+}
