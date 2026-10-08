@@ -67,7 +67,7 @@
     ".agents/skills/pushing/SKILL.md",
     ".agents/skills/reviewing/SKILL.md"
   ],
-  "projectAnchor": 1,
+  "projectAnchor": 8,
   "adoptDate": "2026-10-07",
   "slotGuidance": {
     ".agents/skills/archiving-rfcs/SKILL.md": {
